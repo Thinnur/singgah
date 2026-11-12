@@ -1,27 +1,58 @@
 #!/bin/bash
-# project-s5: uji segmentasi gateway dengan 2 peer WireGuard sungguhan (lewat relay VPS).
-# Socket WireGuard lahir di netns utama -> paket keluar lewat internet rumah seperti klien luar.
-# Pakai: sudo s5-selftest   (ENDPOINT=192.168.1.29:51820 untuk uji tanpa relay)
+# Singgah: uji gateway dengan peer WireGuard sungguhan (lewat relay VPS). Jalankan sebagai root di laptop gateway.
+#   sudo s5-selftest         cek segmentasi; peer uji = lease di database (CLI lease), dipasang oleh singgah-worker
+#   sudo s5-selftest --api   alur portal ujung ke ujung lewat API 127.0.0.1:8780 (butuh TEST_MODE=1)
+# Socket WireGuard peer uji lahir di netns utama -> paket keluar lewat internet rumah seperti klien luar.
+# ENDPOINT=192.168.1.29:51820 untuk uji tanpa relay. Private key peer uji hanya ada di memori, tidak pernah ke disk.
 set -uo pipefail
 ENDPOINT=${ENDPOINT:-103.93.133.235:51820}
-GW_PUB=$(wg show wg0 public-key)
-declare -A PUB
-fail=0
+API=http://127.0.0.1:8780
+USER_EMAIL=selftest-api@mail.ugm.ac.id
+ADMIN_EMAIL=admin@mail.ugm.ac.id
+declare -A OPEN         # lease uji yang mungkin masih aktif (id -> 1); dicabut saat skrip keluar
+ORPHAN='' TMP='' fail=0 took=0 bytes=''
+
+ok()  { echo "PASS  $*"; }
+bad() { echo "FAIL  $*"; fail=1; }
+die() { bad "$*"; echo "ADA YANG GAGAL"; exit 1; }
+
+lease() {   # CLI lease sebagai user singgah, bukan root (root akan memiliki file -wal/-shm SQLite)
+	( set -a; . /etc/singgah/singgah.env; set +a; cd / && exec runuser -u singgah -- \
+		/opt/node-v24.22.1/bin/node /opt/singgah/backend/src/cli/lease.ts "$@" )
+}
 
 cleanup() {
+	local id n
+	for id in "${!OPEN[@]}"; do lease revoke --id "$id" --reason selftest >/dev/null 2>&1; done
+	OPEN=()
+	[ -n "$ORPHAN" ] && wg set wg0 peer "$ORPHAN" remove 2>/dev/null
 	for n in 1 2; do
-		ip netns del "s5t$n" 2>/dev/null || true
-		ip link del "s5t$n" 2>/dev/null || true
-		[ -n "${PUB[$n]:-}" ] && wg set wg0 peer "${PUB[$n]}" remove 2>/dev/null
+		ip netns del "s5t$n" 2>/dev/null
+		ip link del "s5t$n" 2>/dev/null
 	done
-	nft delete element ip s5gw lab_cyber '{ 10.8.0.250 }' 2>/dev/null || true
+	[ -n "$TMP" ] && rm -rf "$TMP"
+	return 0
 }
 trap cleanup EXIT
 
-peer() {   # peer <n> <ip tunnel>
-	local n=$1 ip=$2 priv
-	priv=$(wg genkey); PUB[$n]=$(echo "$priv" | wg pubkey)
-	wg set wg0 peer "${PUB[$n]}" allowed-ips "$ip/32"
+now_ms() { local t=${EPOCHREALTIME//[!0-9]/}; echo $((t / 1000)); }
+waitfor() {   # waitfor <detik> <jeda> <perintah...>: ulangi sampai sukses; $took = lama menunggu (detik)
+	local t0 end step=$2; t0=$(now_ms); end=$((t0 + $1 * 1000)); shift 2
+	until "$@" >/dev/null 2>&1; do
+		[ "$(now_ms)" -lt "$end" ] || return 1
+		sleep "$step"
+	done
+	local d=$(($(now_ms) - t0)); took=$((d / 1000)).$((d % 1000 / 100))
+}
+
+haspeer() { wg show wg0 peers | grep -xF -- "$1" >/dev/null; }   # tanpa -q: grep -q + pipefail bisa kena SIGPIPE
+inset()   { nft get element ip s5gw "lab_$1" "{ $2 }" >/dev/null 2>&1; }   # inset <lab tanpa "lab-"> <ip>
+gone()    { ! haspeer "$1" && { [ $# -lt 3 ] || ! inset "$2" "$3"; }; }   # gone <pubkey> [<lab> <ip>]
+shaken()  { ip netns exec "s5t$1" wg show "s5t$1" latest-handshakes | awk '$2 > 0 {f=1} END {exit !f}'; }
+
+peer() {   # peer <n> <private key> <ip tunnel>: klien uji di netns s5t<n>, tunggu handshake
+	local n=$1 priv=$2 ip=$3
+	ip netns del "s5t$n" 2>/dev/null; ip link del "s5t$n" 2>/dev/null
 	ip netns add "s5t$n"
 	ip link add "s5t$n" type wireguard
 	wg set "s5t$n" private-key <(echo "$priv") peer "$GW_PUB" endpoint "$ENDPOINT" \
@@ -31,33 +62,150 @@ peer() {   # peer <n> <ip tunnel>
 	ip -n "s5t$n" link set "s5t$n" mtu 1200 up
 	ip -n "s5t$n" route add 10.8.0.0/24 dev "s5t$n"
 	ip -n "s5t$n" route add 192.168.0.0/16 dev "s5t$n"
+	waitfor 10 0.2 shaken "$n" || die "peer uji $n ($ip): tidak ada handshake lewat $ENDPOINT dalam 10 dtk"
 }
 
 check() {   # check <harap: ok|blok> <keterangan> <perintah...>
-	local want=$1 desc=$2; shift 2
+	local want=$1 desc=$2 got; shift 2
 	if "$@" >/dev/null 2>&1; then got=ok; else got=blok; fi
-	if [ "$got" = "$want" ]; then echo "PASS  $desc"; else echo "FAIL  $desc (harap $want, dapat $got)"; fail=1; fi
+	if [ "$got" = "$want" ]; then ok "$desc"; else bad "$desc (harap $want, dapat $got)"; fi
 }
-p1() { ip netns exec s5t1 ping -c 2 -W 2 "$1"; }
-tcp1() { ip netns exec s5t1 timeout 3 bash -c "</dev/tcp/$1/$2"; }
+pingn() { ip netns exec "s5t$1" ping -c 2 -W 2 "$2"; }                    # pingn <n> <ip>
+tcpn()  { ip netns exec "s5t$1" timeout 3 bash -c "</dev/tcp/$2/$3"; }   # tcpn <n> <ip> <port>
 
-cleanup
-peer 1 10.8.0.250
-peer 2 10.8.0.251
-nft add element ip s5gw lab_cyber '{ 10.8.0.250 }'   # lease aktif peer 1 ke lab-cyber
-sleep 2
+# ---- mode bawaan: lease lewat CLI (tidak butuh TEST_MODE) ----
+mode_db() {
+	local n out
+	local -A LAB=([1]=lab-cyber [2]=lab-cloud) PRIV PUB LID IP
+	for n in 1 2; do
+		PRIV[$n]=$(wg genkey); PUB[$n]=$(echo "${PRIV[$n]}" | wg pubkey)
+		out=$(lease add --email "selftest$n@local" --lab "${LAB[$n]}" --pubkey "${PUB[$n]}" --minutes 10) ||
+			die "lease add peer $n (${LAB[$n]}) gagal"
+		LID[$n]=${out%% *} IP[$n]=${out#* }
+		OPEN[${LID[$n]}]=1
+	done
+	for n in 1 2; do
+		waitfor 6 0.2 haspeer "${PUB[$n]}" || die "lease $n (${LAB[$n]}, ${IP[$n]}) tidak dipasang worker ke wg0 dalam 6 dtk"
+		ok "lease $n (${LAB[$n]}, ${IP[$n]}) dipasang worker ke wg0 (${took} dtk)"
+		peer "$n" "${PRIV[$n]}" "${IP[$n]}"
+	done
 
-check ok   "peer -> gateway 10.8.0.1 (ping)"            p1 10.8.0.1
-check ok   "peer -> lab yang diminta (cyber .20.10)"    p1 192.168.20.10
-check ok   "paket penuh MTU 1200 ke lab (DF)"            ip netns exec s5t1 ping -c 2 -W 2 -M do -s 1172 192.168.20.10
-check blok "peer -> lab lain (cloud .10.10)"             p1 192.168.10.10
-check blok "peer -> lab lain (jarkom .30.10)"            p1 192.168.30.10
-check blok "peer -> peer lain 10.8.0.251"                p1 10.8.0.251
-check blok "peer -> SSH laptop 10.8.0.1:22"              tcp1 10.8.0.1 22
-check blok "peer -> LAN rumah 192.168.1.1"               p1 192.168.1.1
-check blok "peer tanpa lease -> lab cyber"               ip netns exec s5t2 ping -c 2 -W 2 192.168.20.10
-nft delete element ip s5gw lab_cyber '{ 10.8.0.250 }'
-check blok "lease dicabut -> lab cyber"                  p1 192.168.20.10
+	check ok   "peer 1 -> gateway 10.8.0.1 (ping)"                 pingn 1 10.8.0.1
+	check ok   "peer 1 -> lab yang diminta (cyber .20.10)"         pingn 1 192.168.20.10
+	check ok   "paket penuh MTU 1200 ke lab (DF)"                  ip netns exec s5t1 ping -c 2 -W 2 -M do -s 1172 192.168.20.10
+	check blok "peer 1 -> lab lain (cloud .10.10)"                 pingn 1 192.168.10.10
+	check blok "peer 1 -> lab lain (jarkom .30.10)"                pingn 1 192.168.30.10
+	check blok "peer 1 -> peer lain ${IP[2]}"                      pingn 1 "${IP[2]}"
+	check blok "peer 1 -> SSH laptop 10.8.0.1:22"                  tcpn 1 10.8.0.1 22
+	check blok "peer 1 -> LAN rumah 192.168.1.1"                   pingn 1 192.168.1.1
+	check ok   "peer 2 -> lab miliknya (cloud .10.10)"             pingn 2 192.168.10.10
+	check blok "peer 2 (lease lab-cloud) -> lab cyber diblokir"    pingn 2 192.168.20.10
 
+	lease revoke --id "${LID[1]}" --reason selftest >/dev/null || bad "revoke lease ${LID[1]} gagal"
+	unset "OPEN[${LID[1]}]"
+	if waitfor 6 0.2 gone "${PUB[1]}" cyber "${IP[1]}"; then ok "lease 1 dicabut: peer dan elemen lab_cyber hilang (${took} dtk)"
+	else bad "lease 1 dicabut: peer/elemen lab_cyber masih ada setelah 6 dtk"; fi
+	check blok "lease dicabut -> lab cyber"                        pingn 1 192.168.20.10
+
+	lease revoke --id "${LID[2]}" --reason selftest >/dev/null || bad "revoke lease ${LID[2]} gagal"
+	unset "OPEN[${LID[2]}]"
+	if waitfor 6 0.2 gone "${PUB[2]}" cloud "${IP[2]}"; then ok "lease 2 dicabut: peer dan elemen lab_cloud hilang (${took} dtk)"
+	else bad "lease 2 dicabut: peer/elemen lab_cloud masih ada setelah 6 dtk"; fi
+}
+
+# ---- mode --api: alur portal (test-login, ajukan, lepas, kedaluwarsa, restart, peer yatim) ----
+req() {   # req <cookie jar> <METHOD> <path> [json] -> $code, $body (body tetap di memori: bisa berisi private key)
+	local args=(-sS -w '\n%{http_code}' -b "$1" -c "$1" -X "$2") out
+	[ $# -ge 4 ] && args+=(-H 'content-type: application/json' --data "$4")
+	out=$(curl "${args[@]}" "$API$3") || { code=000 body=''; return 1; }
+	code=${out##*$'\n'} body=${out%$'\n'*}
+}
+jb() { printf '%s' "$body" | jq -r "$@"; }
+
+issue() {   # issue <menit>: lease lab-cyber lewat API -> LID IP EXP PRIV PUB (kunci dari config klien)
+	req "$JAR" POST /api/leases "{\"labId\":\"lab-cyber\",\"minutes\":$1}"
+	[ "$code" = 201 ] || die "POST /api/leases ($1 menit): HTTP $code $body"
+	LID=$(jb .lease.id); OPEN[$LID]=1
+	EXP=$(jb .lease.expiresAt)
+	local conf; conf=$(jb .config); body=''
+	PRIV=${conf#*PrivateKey = }; PRIV=${PRIV%%$'\n'*}
+	IP=${conf#*Address = }; IP=${IP%%/*}
+	PUB=$(echo "$PRIV" | wg pubkey 2>/dev/null) || die "config lease $LID: PrivateKey tidak valid"
+}
+release() {
+	req "$JAR" POST "/api/leases/$LID/release" '{}'
+	[ "$code" = 200 ] || { bad "lepas lease $LID: HTTP $code $body"; return 1; }
+	unset "OPEN[$LID]"
+}
+audit() {   # audit <lease id> <ip> <aksi> [byte]: entri ada; dengan "byte" juga bytesRx dan bytesTx > 0
+	req "$ADM" GET "/api/admin/audit?ip=$2" && [ "$code" = 200 ] || return 1
+	bytes=$(jb --argjson id "$1" --arg a "$3" \
+		'first(.[] | select(.leaseId == $id and .action == $a) | "rx=\(.detail.bytesRx) tx=\(.detail.bytesTx)") // empty')
+	[ -n "$bytes" ] && { [ "${4:-}" != byte ] || [[ $bytes =~ ^rx=[1-9][0-9]*\ tx=[1-9][0-9]*$ ]]; }
+}
+restored() { haspeer "$PUB" && inset cyber "$IP"; }
+expired()  { gone "$PUB" cyber "$IP" && audit "$LID" "$IP" EXPIRED byte; }
+
+mode_api() {
+	TMP=$(mktemp -d) JAR=$TMP/user ADM=$TMP/admin
+	req "$JAR" POST /auth/test-login "{\"email\":\"$USER_EMAIL\"}"
+	[ "$code" = 404 ] && die "mode --api butuh TEST_MODE=1 di /etc/singgah/singgah.env (test-login 404)"
+	[ "$code" = 200 ] || die "test-login $USER_EMAIL: HTTP $code $body"
+	req "$ADM" POST /auth/test-login "{\"email\":\"$ADMIN_EMAIL\"}"
+	[ "$code" = 200 ] || die "test-login $ADMIN_EMAIL: HTTP $code $body"
+
+	# 1. ajukan -> peer aktif <= 5 dtk -> klien (kunci dari config) bisa ke lab cyber, tidak ke lab lain
+	issue 60
+	if waitfor 5 0.1 haspeer "$PUB"; then ok "1. lease lab-cyber 60 menit ($IP): peer aktif di wg0 (${took} dtk)"
+	else
+		bad "1. lease lab-cyber 60 menit ($IP): peer tidak aktif dalam 5 dtk"
+		waitfor 10 0.2 haspeer "$PUB" || die "1. peer lease $LID tidak pernah dipasang worker"
+	fi
+	peer 1 "$PRIV" "$IP"
+	check ok   "1. klien -> lab cyber 192.168.20.10"         pingn 1 192.168.20.10
+	check blok "1. klien -> lab lain (cloud .10.10)"         pingn 1 192.168.10.10
+
+	# 2. lepas -> peer dan elemen set hilang <= 6 dtk, audit REVOKED + CLOSED dengan byte
+	release
+	if waitfor 6 0.2 gone "$PUB" cyber "$IP"; then ok "2. dilepas: peer dan elemen lab_cyber hilang (${took} dtk)"
+	else bad "2. dilepas: peer/elemen lab_cyber masih ada setelah 6 dtk"; fi
+	if waitfor 3 0.5 audit "$LID" "$IP" REVOKED && waitfor 6 0.5 audit "$LID" "$IP" CLOSED byte; then
+		ok "2. audit REVOKED + CLOSED ($bytes)"
+	else bad "2. audit REVOKED + CLOSED dengan byte > 0 tidak ada (${bytes:-kosong})"; fi
+
+	# 3. lease 1 menit -> dilepas <= 30 dtk setelah expiresAt, audit EXPIRED dengan byte
+	issue 1
+	waitfor 6 0.2 haspeer "$PUB" || die "3. peer lease 1 menit tidak dipasang worker dalam 6 dtk"
+	peer 1 "$PRIV" "$IP"
+	check ok "3. klien lease 1 menit -> lab cyber"               pingn 1 192.168.20.10
+	if waitfor $(((EXP + 30000 - $(now_ms)) / 1000)) 2 expired; then
+		ok "3. kedaluwarsa: peer dan elemen hilang, audit EXPIRED $((($(now_ms) - EXP) / 1000)) dtk setelah expiresAt ($bytes)"
+		unset "OPEN[$LID]"
+	else bad "3. lease 1 menit: peer masih ada atau audit EXPIRED dengan byte belum ada 30 dtk setelah expiresAt"; fi
+	ip netns del s5t1 2>/dev/null
+
+	# 4. simulasi reboot: restart wg-quick@wg0 + s5-labs dengan satu lease aktif -> pulih <= 10 dtk
+	issue 60
+	waitfor 6 0.2 restored || die "4. peer lease $LID tidak dipasang worker dalam 6 dtk"
+	if systemctl restart wg-quick@wg0 s5-labs; then
+		if waitfor 10 0.2 restored; then ok "4. restart wg-quick@wg0 + s5-labs: peer dan elemen lab_cyber pulih (${took} dtk)"
+		else bad "4. restart wg-quick@wg0 + s5-labs: peer/elemen lab_cyber tidak pulih dalam 10 dtk"; fi
+	else bad "4. systemctl restart wg-quick@wg0 s5-labs gagal"; fi
+	release
+
+	# 5. peer yatim yang ditambah manual -> dihapus worker <= 6 dtk
+	ORPHAN=$(wg genkey | wg pubkey)
+	wg set wg0 peer "$ORPHAN" allowed-ips 10.8.0.250/32 || bad "5. wg set peer yatim gagal"
+	if waitfor 6 0.2 gone "$ORPHAN"; then ok "5. peer yatim 10.8.0.250 dihapus worker (${took} dtk)"; ORPHAN=''
+	else bad "5. peer yatim 10.8.0.250 masih ada setelah 6 dtk"; fi
+}
+
+[ "$EUID" = 0 ] || { echo "jalankan sebagai root: sudo $0 [--api]" >&2; exit 2; }
+GW_PUB=$(wg show wg0 public-key) || die "wg0 tidak ada"
+case "${1:-}" in
+	'') mode_db ;;
+	--api) mode_api ;;
+	*) echo "pakai: $0 [--api]" >&2; exit 2 ;;
+esac
 [ $fail = 0 ] && echo "SEMUA LULUS" || echo "ADA YANG GAGAL"
 exit $fail
