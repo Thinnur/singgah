@@ -1,0 +1,9 @@
+' Gaya bersama untuk semua activity diagram
+skinparam shadowing false
+skinparam ArrowColor #555555
+skinparam ActivityBackgroundColor #FFF8EE
+skinparam ActivityBorderColor #B5651D
+skinparam ActivityDiamondBackgroundColor #FDEBD0
+skinparam ActivityDiamondBorderColor #B5651D
+skinparam SwimlaneTitleFontStyle bold
+skinparam TitleFontSize 16

@@ -1,0 +1,63 @@
+#!/bin/bash
+# project-s5: uji segmentasi gateway dengan 2 peer WireGuard sungguhan (lewat relay VPS).
+# Socket WireGuard lahir di netns utama -> paket keluar lewat internet rumah seperti klien luar.
+# Pakai: sudo s5-selftest   (ENDPOINT=192.168.1.29:51820 untuk uji tanpa relay)
+set -uo pipefail
+ENDPOINT=${ENDPOINT:-103.93.133.235:51820}
+GW_PUB=$(wg show wg0 public-key)
+declare -A PUB
+fail=0
+
+cleanup() {
+	for n in 1 2; do
+		ip netns del "s5t$n" 2>/dev/null || true
+		ip link del "s5t$n" 2>/dev/null || true
+		[ -n "${PUB[$n]:-}" ] && wg set wg0 peer "${PUB[$n]}" remove 2>/dev/null
+	done
+	nft delete element ip s5gw lab_cyber '{ 10.8.0.250 }' 2>/dev/null || true
+}
+trap cleanup EXIT
+
+peer() {   # peer <n> <ip tunnel>
+	local n=$1 ip=$2 priv
+	priv=$(wg genkey); PUB[$n]=$(echo "$priv" | wg pubkey)
+	wg set wg0 peer "${PUB[$n]}" allowed-ips "$ip/32"
+	ip netns add "s5t$n"
+	ip link add "s5t$n" type wireguard
+	wg set "s5t$n" private-key <(echo "$priv") peer "$GW_PUB" endpoint "$ENDPOINT" \
+		allowed-ips 10.8.0.0/24,192.168.0.0/16 persistent-keepalive 1
+	ip link set "s5t$n" netns "s5t$n"
+	ip -n "s5t$n" addr add "$ip/32" dev "s5t$n"
+	ip -n "s5t$n" link set "s5t$n" mtu 1200 up
+	ip -n "s5t$n" route add 10.8.0.0/24 dev "s5t$n"
+	ip -n "s5t$n" route add 192.168.0.0/16 dev "s5t$n"
+}
+
+check() {   # check <harap: ok|blok> <keterangan> <perintah...>
+	local want=$1 desc=$2; shift 2
+	if "$@" >/dev/null 2>&1; then got=ok; else got=blok; fi
+	if [ "$got" = "$want" ]; then echo "PASS  $desc"; else echo "FAIL  $desc (harap $want, dapat $got)"; fail=1; fi
+}
+p1() { ip netns exec s5t1 ping -c 2 -W 2 "$1"; }
+tcp1() { ip netns exec s5t1 timeout 3 bash -c "</dev/tcp/$1/$2"; }
+
+cleanup
+peer 1 10.8.0.250
+peer 2 10.8.0.251
+nft add element ip s5gw lab_cyber '{ 10.8.0.250 }'   # lease aktif peer 1 ke lab-cyber
+sleep 2
+
+check ok   "peer -> gateway 10.8.0.1 (ping)"            p1 10.8.0.1
+check ok   "peer -> lab yang diminta (cyber .20.10)"    p1 192.168.20.10
+check ok   "paket penuh MTU 1200 ke lab (DF)"            ip netns exec s5t1 ping -c 2 -W 2 -M do -s 1172 192.168.20.10
+check blok "peer -> lab lain (cloud .10.10)"             p1 192.168.10.10
+check blok "peer -> lab lain (jarkom .30.10)"            p1 192.168.30.10
+check blok "peer -> peer lain 10.8.0.251"                p1 10.8.0.251
+check blok "peer -> SSH laptop 10.8.0.1:22"              tcp1 10.8.0.1 22
+check blok "peer -> LAN rumah 192.168.1.1"               p1 192.168.1.1
+check blok "peer tanpa lease -> lab cyber"               ip netns exec s5t2 ping -c 2 -W 2 192.168.20.10
+nft delete element ip s5gw lab_cyber '{ 10.8.0.250 }'
+check blok "lease dicabut -> lab cyber"                  p1 192.168.20.10
+
+[ $fail = 0 ] && echo "SEMUA LULUS" || echo "ADA YANG GAGAL"
+exit $fail

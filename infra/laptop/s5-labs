@@ -1,0 +1,58 @@
+#!/bin/bash
+# project-s5: subnet lab simulasi (netns) + firewall gateway wg0. Dijalankan oleh s5-labs.service.
+# Tabel nftables sendiri (ip s5gw); JANGAN "nft flush ruleset" (milik docker/k3s/tailscale).
+# Worker memberi akses: nft add element ip s5gw lab_<id> { 10.8.0.x }  (delete element saat lease habis)
+set -euo pipefail
+LABS="cloud:192.168.10 cyber:192.168.20 jarkom:192.168.30"   # id lab : 3 oktet pertama subnet /24
+
+down() {
+	for l in $LABS; do ip netns del "lab-${l%%:*}" 2>/dev/null || true; done   # veth ikut terhapus
+	nft delete table ip s5gw 2>/dev/null || true
+	while iptables -D DOCKER-USER -i wg0 -o s5-+ -j ACCEPT 2>/dev/null; do :; done
+	while iptables -D DOCKER-USER -i s5-+ -o wg0 -j ACCEPT 2>/dev/null; do :; done
+}
+
+up() {
+	down
+	local sets="" rules="" id net
+	for l in $LABS; do
+		id=${l%%:*} net=${l#*:}
+		ip netns add "lab-$id"
+		ip link add "s5-$id" type veth peer name eth0 netns "lab-$id"
+		ip addr add "$net.1/24" dev "s5-$id"
+		ip link set "s5-$id" up
+		ip -n "lab-$id" addr add "$net.10/24" dev eth0   # "VM target" lab
+		ip -n "lab-$id" link set lo up
+		ip -n "lab-$id" link set eth0 up
+		ip -n "lab-$id" route add 10.8.0.0/24 via "$net.1"
+		sets+="set lab_$id { type ipv4_addr; }"$'\n'
+		rules+="iifname \"wg0\" oifname \"s5-$id\" ip saddr @lab_$id accept"$'\n'
+	done
+	nft -f - <<-EOF
+	table ip s5gw {
+		$sets
+		chain forward {
+			type filter hook forward priority filter - 10; policy accept;
+			ct state established,related accept
+			$rules
+			iifname "wg0" drop
+			oifname "wg0" drop
+		}
+		chain input {
+			type filter hook input priority filter - 10; policy accept;
+			iifname "wg0" ct state established,related accept
+			iifname "wg0" ip daddr 10.8.0.1 icmp type echo-request accept
+			iifname "wg0" drop
+		}
+	}
+	EOF
+	# Docker men-DROP forwarding bawaan; kebijakan sebenarnya ditegakkan tabel s5gw di atas.
+	iptables -I DOCKER-USER -i wg0 -o s5-+ -j ACCEPT
+	iptables -I DOCKER-USER -i s5-+ -o wg0 -j ACCEPT
+}
+
+case "${1:-}" in
+	up) up ;;
+	down) down ;;
+	*) echo "pakai: $0 up|down" >&2; exit 2 ;;
+esac

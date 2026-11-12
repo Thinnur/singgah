@@ -1,0 +1,132 @@
+' Flowchart: Ephemeral VPN Gateway (satu blok = satu gambar)
+' Render: docker run --rm --user root -v "$PWD":/data -w /data plantuml/plantuml -tpng -o gambar diagram/vpn-flowchart.puml   (ganti -tpng dengan -tsvg untuk SVG)
+
+@startuml vpn-flow-1-pengajuan
+!include _gaya.iuml
+title Flowchart 1: Pengajuan dan Penerbitan Akses VPN
+|Pemohon|
+start
+:Buka portal VPN;
+|Portal & API|
+if (Sudah login?) then (ya)
+else (tidak)
+  |Pemohon|
+  :Login dengan akun Google UGM;
+  |Portal & API|
+  if (Email @mail.ugm.ac.id
+atau @ugm.ac.id?) then (ya)
+  else (tidak)
+    :Tolak login dan
+    tampilkan alasannya;
+    stop
+  endif
+endif
+|Pemohon|
+:Pilih lab tujuan dan durasi
+(1, 2, atau 4 jam), klik "Ajukan";
+|Portal & API|
+:Validasi permintaan;
+note right
+  - belum punya lease aktif
+  - kuota jam harian masih cukup
+  - lab aktif, durasi ≤ batas lab
+  - masih ada IP tunnel kosong
+end note
+if (Semua syarat terpenuhi?) then (ya)
+else (tidak)
+  :Tolak dan tampilkan alasannya;
+  stop
+endif
+:Buat keypair WireGuard di memori
+dan ambil IP tunnel kosong;
+:Simpan lease ACTIVE (public key, IP tunnel,
+lab, expires_at) dan catat log audit;
+:Kirim file .conf dan QR code ke pemohon,
+lalu buang private key dari memori;
+|Gateway Worker|
+:Siklus rekonsiliasi berikutnya (≤ 5 detik):
+pasang peer ke wg0 dan izinkan
+IP tunnel ke subnet lab (Flowchart 2);
+|Pemohon|
+:Impor konfigurasi ke aplikasi
+WireGuard dan sambungkan;
+:Akses lab tujuan. Dashboard menampilkan
+sisa waktu dan tombol "Lepas Lease";
+stop
+@enduml
+
+@startuml vpn-flow-2-rekonsiliasi
+!include _gaya.iuml
+title Flowchart 2: Siklus Rekonsiliasi Gateway (Pencabutan Otomatis)
+|Gateway Worker|
+start
+:Service dinyalakan
+(juga setelah reboot tak terencana);
+repeat
+  |Database|
+  :Ubah lease ACTIVE yang melewati expires_at
+  menjadi EXPIRED dan catat log audit
+  (IP tunnel otomatis kembali ke pool);
+  :Ambil daftar lease ACTIVE
+  (peer yang seharusnya terpasang);
+  |WireGuard & nftables|
+  :Baca peer yang sedang terpasang
+  (wg show wg0 dump);
+  |Gateway Worker|
+  :Bandingkan daftar seharusnya
+  dengan yang terpasang;
+  if (Ada lease ACTIVE yang
+peer-nya belum terpasang?) then (ya)
+    |WireGuard & nftables|
+    :wg set wg0 peer PUBKEY allowed-ips IP/32,
+    lalu izinkan IP ke subnet lab tujuan;
+  else (tidak)
+  endif
+  |Gateway Worker|
+  if (Ada peer terpasang yang lease-nya
+tidak lagi ACTIVE?) then (ya)
+    |WireGuard & nftables|
+    :Baca byte terakhir, lalu
+    wg set wg0 peer PUBKEY remove
+    dan cabut izin IP ke subnet lab;
+  else (tidak)
+  endif
+  |Database|
+  :Simpan bytes_tx / bytes_rx tiap lease;
+  |Gateway Worker|
+  :Tunggu 5 detik;
+  note right
+    Perintah yang gagal dicatat di log
+    dan dicoba lagi di siklus berikutnya
+  end note
+repeat while (Service masih berjalan?) is (ya) not (tidak)
+stop
+@enduml
+
+@startuml vpn-flow-3-pencabutan-manual
+!include _gaya.iuml
+title Flowchart 3: Pencabutan Manual oleh Pemohon atau Admin
+|Pemohon / Admin|
+start
+if (Siapa yang mencabut?) then (pemohon)
+  :Klik "Lepas Lease" di dashboard;
+else (admin)
+  :Pilih lease di daftar lease aktif
+  dan isi alasan pencabutan;
+endif
+|Portal & API|
+if (Pemilik lease atau admin?) then (ya)
+  :Ubah status lease menjadi REVOKED;
+  :Catat pelaku, waktu, dan alasan
+  di log audit;
+  :Tampilkan status "Dicabut";
+  |Gateway Worker|
+  :Siklus rekonsiliasi berikutnya (≤ 5 detik)
+  melepas peer dan izin firewall
+  (Flowchart 2);
+else (tidak)
+  |Portal & API|
+  :Tolak permintaan (403);
+endif
+stop
+@enduml

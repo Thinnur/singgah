@@ -1,0 +1,15 @@
+[Unit]
+Description=project-s5 relay UDP 51820 ke laptop via Tailscale
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# autoload modul kernel mati di VPS ini (kernel.modprobe kosong)
+ExecStartPre=/usr/sbin/modprobe -a nft_nat nft_masq
+ExecStart=/usr/sbin/nft -f /etc/s5-relay.nft
+ExecStop=/usr/sbin/nft delete table ip s5relay
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+# project-s5 gateway. Peer TIDAK ditulis di sini: worker menambahkan lewat "wg set wg0 peer ..." saat runtime.
+[Interface]
+Address = 10.8.0.1/24
+ListenPort = 51820
+# paket arah gateway->klien lewat relay Tailscale (MTU 1280), samakan dengan MTU klien 1200
+MTU = 1200
+PrivateKey = <isi dengan wg genkey>

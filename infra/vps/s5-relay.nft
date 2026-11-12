@@ -1,0 +1,17 @@
+#!/usr/sbin/nft -f
+# project-s5: klien internet -> UDP 51820 VPS -> gateway WireGuard di laptop lewat Tailscale.
+# Tabel sendiri; JANGAN "flush ruleset" (milik docker/ufw/tailscale).
+# Filter FORWARD sudah di-ACCEPT oleh chain ts-forward milik tailscale.
+table ip s5relay
+delete table ip s5relay
+table ip s5relay {
+	chain pre {
+		type nat hook prerouting priority dstnat; policy accept;
+		iifname "eth0" udp dport 51820 dnat to 100.68.173.108:51820
+	}
+	chain post {
+		# laptop hanya menerima src dari tailnet, jadi src klien diganti IP Tailscale VPS
+		type nat hook postrouting priority srcnat; policy accept;
+		oifname "tailscale0" ip daddr 100.68.173.108 udp dport 51820 masquerade
+	}
+}
