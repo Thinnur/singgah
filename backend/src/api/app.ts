@@ -5,6 +5,7 @@ import type { Config } from '../config.ts';
 import type { ApiError } from './types.ts';
 import { HttpError } from './session.ts';
 import { authRoutes } from './auth.ts';
+import { leaseRoutes } from './leases.ts';
 
 // staticDir is accepted now; static serving is added in a later task.
 export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof fetch; now?: () => number; staticDir?: string }): FastifyInstance {
@@ -39,5 +40,6 @@ export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof
   });
 
   authRoutes(app);
+  leaseRoutes(app);
   return app;
 }
