@@ -29,4 +29,8 @@ describe('formatMinutes', () => {
     expect(formatMinutes(90)).toBe('1 jam 30 menit');
     expect(formatMinutes(0)).toBe('0 menit');
   });
+  it('floors fractional minutes (quota left is not a whole number)', () => {
+    expect(formatMinutes(478.505)).toBe('7 jam 58 menit');
+    expect(formatMinutes(0.4)).toBe('0 menit');
+  });
 });

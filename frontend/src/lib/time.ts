@@ -16,9 +16,10 @@ export function formatBytes(n: number): string {
   return `${num.format(n)} ${UNITS[i]}`;
 }
 
-/** Lease durations are minutes: 1 → "1 menit", 120 → "2 jam", 90 → "1 jam 30 menit". */
+/** Minutes as "1 menit" / "2 jam" / "1 jam 30 menit"; fractions (quota left) round down. */
 export function formatMinutes(min: number): string {
-  const h = Math.floor(min / 60), m = min % 60;
+  const whole = Math.max(0, Math.floor(min));
+  const h = Math.floor(whole / 60), m = whole % 60;
   return [h && `${h} jam`, (m || !h) && `${m} menit`].filter(Boolean).join(' ');
 }
 
