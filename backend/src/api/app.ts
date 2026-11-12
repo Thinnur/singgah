@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
+import fastifyStatic from '@fastify/static';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Config } from '../config.ts';
 import type { ApiError } from './types.ts';
@@ -8,7 +9,7 @@ import { authRoutes } from './auth.ts';
 import { leaseRoutes } from './leases.ts';
 import { adminRoutes } from './admin.ts';
 
-// staticDir is accepted now; static serving is added in a later task.
+// staticDir: built frontend (frontend/dist), served with SPA fallback.
 export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof fetch; now?: () => number; staticDir?: string; sysNetDir?: string }): FastifyInstance {
   const app = Fastify({ logger: false, trustProxy: false });
   app.register(cookie);
@@ -19,8 +20,12 @@ export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof
     try { done(null, body === '' ? {} : JSON.parse(body as string)); } catch { done(new HttpError(400, 'BAD_REQUEST', 'JSON tidak valid')); }
   });
 
-  app.setNotFoundHandler((_req, reply) =>
-    reply.status(404).send({ code: 'NOT_FOUND', message: 'Tidak ditemukan' } satisfies ApiError));
+  if (o.staticDir) app.register(fastifyStatic, { root: o.staticDir });
+  app.setNotFoundHandler((req, reply) => {
+    // Client-side routes (/admin/labs, /hasil, ...) get index.html; API/auth keep the JSON 404.
+    if (o.staticDir && req.method === 'GET' && !/^\/(api|auth)(\/|\?|$)/.test(req.url)) return reply.sendFile('index.html');
+    return reply.status(404).send({ code: 'NOT_FOUND', message: 'Tidak ditemukan' } satisfies ApiError);
+  });
 
   app.addHook('onRequest', async (req) => {
     // Every POST/PATCH must be JSON; do not match on req.url (percent-encoded paths bypass it).

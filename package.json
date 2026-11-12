@@ -1,7 +1,7 @@
 {
   "name": "singgah",
   "private": true,
-  "workspaces": ["backend"],
+  "workspaces": ["backend", "frontend"],
   "scripts": {
     "test": "npm test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
