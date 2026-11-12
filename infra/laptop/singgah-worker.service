@@ -1,0 +1,23 @@
+[Unit]
+Description=Singgah worker (rekonsiliasi wg0 dan nftables)
+After=wg-quick@wg0.service s5-labs.service
+Wants=wg-quick@wg0.service
+
+[Service]
+User=singgah
+Group=singgah
+EnvironmentFile=/etc/singgah/singgah.env
+ExecStart=/opt/node-v24.22.1/bin/node /opt/singgah/backend/src/worker/main.ts
+# keluar 1 selama skema belum dimigrasi API; systemd mencoba lagi
+Restart=on-failure
+RestartSec=5
+UMask=0027
+# capability diwariskan ke wg dan nft yang dijalankan worker
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+ProtectSystem=strict
+ReadWritePaths=/var/lib/singgah
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

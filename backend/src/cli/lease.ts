@@ -1,4 +1,5 @@
-// Self-test CLI, run as root on the gateway laptop (with /etc/singgah/singgah.env loaded):
+// Self-test CLI, run on the gateway laptop as the singgah user, never root (root would own the SQLite
+// -wal/-shm files and lock the services out), with /etc/singgah/singgah.env loaded; see README.
 //   node src/cli/lease.ts add --email <e> --lab <id> --pubkey <p> --minutes <n>   -> "<leaseId> <tunnelIp>"
 //   node src/cli/lease.ts revoke --id <n> --reason <r>
 // Skips the domain/quota policy on purpose; allocation and audit are the API's own (leasestore.ts).

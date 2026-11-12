@@ -1,0 +1,21 @@
+[Unit]
+Description=Singgah API (portal VPN lab)
+After=network-online.target
+
+[Service]
+User=singgah
+Group=singgah
+EnvironmentFile=/etc/singgah/singgah.env
+ExecStart=/opt/node-v24.22.1/bin/node /opt/singgah/backend/src/api/main.ts
+Restart=on-failure
+RestartSec=5
+# database 0640 (desain 5.4)
+UMask=0027
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/singgah
+PrivateTmp=yes
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

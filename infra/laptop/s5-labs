@@ -1,7 +1,8 @@
 #!/bin/bash
 # project-s5: subnet lab simulasi (netns) + firewall gateway wg0. Dijalankan oleh s5-labs.service.
 # Tabel nftables sendiri (ip s5gw); JANGAN "nft flush ruleset" (milik docker/k3s/tailscale).
-# Worker memberi akses: nft add element ip s5gw lab_<id> { 10.8.0.x }  (delete element saat lease habis)
+# Skrip ini hanya memasang kerangka s5gw. Set lab_<id> dan aturan accept per lab (comment "singgah:<lab-id>")
+# milik singgah-worker: hilang saat skrip ini dijalankan ulang, lalu dipasang lagi pada siklus worker berikutnya.
 set -euo pipefail
 LABS="cloud:192.168.10 cyber:192.168.20 jarkom:192.168.30"   # id lab : 3 oktet pertama subnet /24
 
@@ -14,7 +15,7 @@ down() {
 
 up() {
 	down
-	local sets="" rules="" id net
+	local id net
 	for l in $LABS; do
 		id=${l%%:*} net=${l#*:}
 		ip netns add "lab-$id"
@@ -25,16 +26,12 @@ up() {
 		ip -n "lab-$id" link set lo up
 		ip -n "lab-$id" link set eth0 up
 		ip -n "lab-$id" route add 10.8.0.0/24 via "$net.1"
-		sets+="set lab_$id { type ipv4_addr; }"$'\n'
-		rules+="iifname \"wg0\" oifname \"s5-$id\" ip saddr @lab_$id accept"$'\n'
 	done
 	nft -f - <<-EOF
 	table ip s5gw {
-		$sets
 		chain forward {
 			type filter hook forward priority filter - 10; policy accept;
 			ct state established,related accept
-			$rules
 			iifname "wg0" drop
 			oifname "wg0" drop
 		}
@@ -43,6 +40,10 @@ up() {
 			iifname "wg0" ct state established,related accept
 			iifname "wg0" ip daddr 10.8.0.1 icmp type echo-request accept
 			iifname "wg0" drop
+			# singgah-api (port 8780) hanya dari localhost dan relay VPS: API mempercayai header CF-Connecting-IP
+			tcp dport 8780 iifname "lo" accept
+			tcp dport 8780 ip saddr 100.68.122.86 accept
+			tcp dport 8780 drop
 		}
 	}
 	EOF
