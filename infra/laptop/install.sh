@@ -2,7 +2,7 @@
 # Singgah: pemasangan di laptop gateway. Jalankan sebagai root; aman diulang.
 #   sudo bash install.sh key   -> hanya buat deploy key + entri ssh "github-singgah", cetak public key-nya
 #                                 (tambahkan ke GitHub sebagai deploy key read-only sebelum langkah berikut)
-#   sudo bash install.sh       -> pemasangan lengkap, diakhiri deploy.sh
+#   sudo bash install.sh       -> pemasangan lengkap: deploy.sh (unit, kode, restart), lalu systemctl enable
 # Variabel singgah.env yang diberikan lewat environment menimpa nilai contoh saat /etc/singgah/singgah.env
 # pertama kali dibuat, mis.: sudo TEST_MODE=1 PUBLIC_URL=http://localhost:8780 bash install.sh
 # Node sistem (v20) tidak disentuh: Node dipasang terpisah di /opt/node-v24.22.1.
@@ -55,9 +55,6 @@ if [ -f /usr/local/sbin/s5-labs ] && [ ! -e /usr/local/sbin/s5-labs.bak-pre-sing
 	cp -p /usr/local/sbin/s5-labs /usr/local/sbin/s5-labs.bak-pre-singgah
 fi
 
-install -m 644 $APP/infra/laptop/s5-labs.service $APP/infra/laptop/singgah-api.service \
-	$APP/infra/laptop/singgah-worker.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable s5-labs singgah-worker singgah-api
-
+# deploy.sh memasang unit dari checkout yang baru di-pull, jadi enable sesudahnya
 bash $APP/infra/laptop/deploy.sh
+systemctl enable s5-labs singgah-worker singgah-api

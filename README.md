@@ -44,7 +44,7 @@ ssh laptop-s5 'sudo TEST_MODE=1 PUBLIC_URL=http://localhost:8780 bash /tmp/insta
 ssh laptop-s5 'sudo bash /opt/singgah/infra/laptop/deploy.sh'
 ```
 
-`deploy.sh`: `git pull --ff-only`, `npm ci`, build frontend (bila ada), pasang `s5-labs` dan `s5-selftest` ke `/usr/local/sbin/`, lalu restart `s5-labs`, `singgah-worker`, `singgah-api`. Perubahan file unit systemd butuh `install.sh` diulang.
+`deploy.sh`: `git pull --ff-only`, pasang file unit systemd dari checkout terbaru lalu `daemon-reload`, `npm ci`, build frontend (bila ada), pasang `s5-labs` dan `s5-selftest` ke `/usr/local/sbin/`, lalu restart `s5-labs`, `singgah-worker`, `singgah-api`.
 
 **Cek cepat:** `systemctl is-active singgah-api singgah-worker s5-labs`, `journalctl -u singgah-worker -f`, `sudo nft list table ip s5gw`, `curl -s localhost:8780/api/me` (401 bila belum login).
 
