@@ -4,3 +4,4 @@ dist/
 *.env
 *.conf
 !infra/**/*.example
+!infra/laptop/90-s5-gateway.conf
