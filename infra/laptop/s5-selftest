@@ -36,13 +36,14 @@ cleanup() {
 trap cleanup EXIT
 
 now_ms() { local t=${EPOCHREALTIME//[!0-9]/}; echo $((t / 1000)); }
+secs()   { echo $(($1 / 1000)).$(($1 % 1000 / 100)); }   # milidetik -> "d.d"
 waitfor() {   # waitfor <detik> <jeda> <perintah...>: ulangi sampai sukses; $took = lama menunggu (detik)
 	local t0 end step=$2; t0=$(now_ms); end=$((t0 + $1 * 1000)); shift 2
 	until "$@" >/dev/null 2>&1; do
 		[ "$(now_ms)" -lt "$end" ] || return 1
 		sleep "$step"
 	done
-	local d=$(($(now_ms) - t0)); took=$((d / 1000)).$((d % 1000 / 100))
+	took=$(secs $(($(now_ms) - t0)))
 }
 
 haspeer() { wg show wg0 peers | grep -xF -- "$1" >/dev/null; }   # tanpa -q: grep -q + pipefail bisa kena SIGPIPE
@@ -179,7 +180,7 @@ mode_api() {
 	peer 1 "$PRIV" "$IP"
 	check ok "3. klien lease 1 menit -> lab cyber"               pingn 1 192.168.20.10
 	if waitfor $(((EXP + 30000 - $(now_ms)) / 1000)) 2 expired; then
-		ok "3. kedaluwarsa: peer dan elemen hilang, audit EXPIRED $((($(now_ms) - EXP) / 1000)) dtk setelah expiresAt ($bytes)"
+		ok "3. kedaluwarsa: peer dan elemen hilang, audit EXPIRED $(secs $(($(now_ms) - EXP))) dtk setelah expiresAt ($bytes)"
 		unset "OPEN[$LID]"
 	else bad "3. lease 1 menit: peer masih ada atau audit EXPIRED dengan byte belum ada 30 dtk setelah expiresAt"; fi
 	ip netns del s5t1 2>/dev/null
