@@ -25,3 +25,6 @@ export function clientConfig(p: { privateKey: string; address: string; serverPub
     '',
   ].join('\n');
 }
+
+/** WireGuard public key format: 32 bytes, base64 (44 chars, one '=' pad). */
+export const isWgPubkey = (k: string): boolean => /^[A-Za-z0-9+/]{43}=$/.test(k);

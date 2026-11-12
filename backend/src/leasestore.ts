@@ -11,7 +11,7 @@ export class LeaseNotActiveError extends Error {
   constructor() { super('lease tidak aktif'); }
 }
 
-function tx<T>(db: DatabaseSync, fn: () => T): T {
+export function tx<T>(db: DatabaseSync, fn: () => T): T {
   db.exec('BEGIN IMMEDIATE');
   try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { if (db.isTransaction) db.exec('ROLLBACK'); throw e; }
 }
