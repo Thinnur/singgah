@@ -1,19 +1,20 @@
 import type { FastifyInstance } from 'fastify';
-import { POOL_FULL, allowedDurations, checkLeaseRequest, usedMinutesToday, type Rejection } from '../rules.ts';
+import { HAS_ACTIVE, POOL_FULL, allowedDurations, checkLeaseRequest, usedMinutesToday, type Rejection } from '../rules.ts';
 import { clientConfig, generateKeyPair } from '../wgkeys.ts';
-import { PoolFullError, createLease, revokeLease } from '../leasestore.ts';
+import { LeaseNotActiveError, PoolFullError, createLease, revokeLease } from '../leasestore.ts';
 import type { IssueResponse, LabOption, LeaseView } from './types.ts';
 import { HttpError, clientIp, requireUser } from './session.ts';
 
-type Row = {
+export type LeaseRow = {
   id: number; lab_id: string; lab_name: string; tunnel_ip: string; status: LeaseView['status'];
   starts_at: number; expires_at: number; revoked_at: number | null; reason: string | null;
   installed_at: number | null; bytes_rx: number | null; bytes_tx: number | null;
 };
-const SELECT = `SELECT l.id,l.lab_id,b.name AS lab_name,l.tunnel_ip,l.status,l.starts_at,l.expires_at,l.revoked_at,l.reason,
-  l.installed_at,l.bytes_rx,l.bytes_tx FROM leases l JOIN labs b ON b.id=l.lab_id`;
+export const LEASE_COLS = `l.id,l.lab_id,b.name AS lab_name,l.tunnel_ip,l.status,l.starts_at,l.expires_at,l.revoked_at,l.reason,
+  l.installed_at,l.bytes_rx,l.bytes_tx`;
+const SELECT = `SELECT ${LEASE_COLS} FROM leases l JOIN labs b ON b.id=l.lab_id`;
 
-const view = (r: Row): LeaseView => ({
+export const leaseView = (r: LeaseRow): LeaseView => ({
   id: r.id, labId: r.lab_id, labName: r.lab_name, tunnelIp: r.tunnel_ip, status: r.status,
   startsAt: r.starts_at, expiresAt: r.expires_at, revokedAt: r.revoked_at, reason: r.reason,
   peerActive: r.installed_at != null, bytesRx: r.bytes_rx ?? 0, bytesTx: r.bytes_tx ?? 0,
@@ -33,8 +34,8 @@ export function leaseRoutes(app: FastifyInstance): void {
 
   app.get('/api/leases/current', async (req): Promise<LeaseView | null> => {
     const u = requireUser(req);
-    const r = db.prepare(`${SELECT} WHERE l.user_id=? AND l.status='ACTIVE'`).get(u.id) as Row | undefined;
-    return r ? view(r) : null;
+    const r = db.prepare(`${SELECT} WHERE l.user_id=? AND l.status='ACTIVE'`).get(u.id) as LeaseRow | undefined;
+    return r ? leaseView(r) : null;
   });
 
   app.post<{ Body: { labId?: unknown; minutes?: unknown } }>('/api/leases', async (req, reply) => {
@@ -61,13 +62,13 @@ export function leaseRoutes(app: FastifyInstance): void {
       try { made = createLease(db, p); }
       catch (e) { if (!uniqueOn(e, 'tunnel_ip')) throw e; made = createLease(db, p); } // one retry on IP race
     } catch (e) {
-      if (uniqueOn(e, 'user_id')) throw new HttpError(409, 'HAS_ACTIVE', 'Kamu masih punya lease aktif');
+      if (uniqueOn(e, 'user_id')) throw reject(HAS_ACTIVE);
       if (e instanceof PoolFullError || uniqueOn(e, 'tunnel_ip')) throw reject(POOL_FULL);
       throw e;
     }
-    const row = db.prepare(`${SELECT} WHERE l.id=?`).get(made.id) as Row;
+    const row = db.prepare(`${SELECT} WHERE l.id=?`).get(made.id) as LeaseRow;
     const config_ = clientConfig({ privateKey: kp.privateKey, address: made.tunnelIp, serverPubkey: config.wgServerPubkey, endpoint: config.wgEndpoint, labCidr: lab!.target_cidr });
-    return reply.status(201).send({ lease: view(row), config: config_, filename: `singgah-${labId}.conf` } satisfies IssueResponse);
+    return reply.status(201).send({ lease: leaseView(row), config: config_, filename: `singgah-${labId}.conf` } satisfies IssueResponse);
   });
 
   app.post<{ Params: { id: string } }>('/api/leases/:id/release', async (req) => {
@@ -75,7 +76,8 @@ export function leaseRoutes(app: FastifyInstance): void {
     const row = db.prepare('SELECT id,status FROM leases WHERE id=? AND user_id=?').get(Number(req.params.id), u.id) as { id: number; status: string } | undefined;
     if (!row) throw new HttpError(404, 'NOT_FOUND', 'Lease tidak ditemukan');
     if (row.status !== 'ACTIVE') throw new HttpError(409, 'NOT_ACTIVE', 'Lease sudah tidak aktif');
-    revokeLease(db, { leaseId: row.id, by: u.email, reason: 'Dilepas pemohon', nowMs: ctx.now() });
+    try { revokeLease(db, { leaseId: row.id, by: u.email, reason: 'Dilepas pemohon', nowMs: ctx.now() }); }
+    catch (e) { throw e instanceof LeaseNotActiveError ? new HttpError(409, 'NOT_ACTIVE', 'Lease sudah tidak aktif') : e; }
     return { ok: true };
   });
 }

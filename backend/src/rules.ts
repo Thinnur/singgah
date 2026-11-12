@@ -41,6 +41,8 @@ export function usedMinutesToday(
 export type RejectCode = 'LAB_UNAVAILABLE' | 'BAD_DURATION' | 'HAS_ACTIVE' | 'QUOTA' | 'POOL_FULL';
 export type Rejection = { code: RejectCode; message: string; status: number };
 
+export const HAS_ACTIVE: Rejection = { code: 'HAS_ACTIVE', message: 'Kamu masih punya lease aktif', status: 409 };
+
 export function checkLeaseRequest(i: {
   lab: { is_active: number; max_hours: number } | undefined;
   minutes: number;
@@ -61,7 +63,7 @@ export function checkLeaseRequest(i: {
       status: 400,
     };
   }
-  if (i.hasActive) return { code: 'HAS_ACTIVE', message: 'Kamu masih punya lease aktif', status: 409 };
+  if (i.hasActive) return HAS_ACTIVE;
   const remaining = Math.max(0, i.quotaHours * 60 - i.usedMinutes);
   if (i.minutes > remaining) {
     return {

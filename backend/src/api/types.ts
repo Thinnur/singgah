@@ -18,3 +18,4 @@ export type Stats = {
   perLab: { labId: string; labName: string; leases: number; minutes: number }[];
   wg0: { rxBps: number; txBps: number } | null;
 };
+export type AdminLab = { id: string; name: string; targetCidr: string; maxHours: number; isActive: boolean; createdAt: number };

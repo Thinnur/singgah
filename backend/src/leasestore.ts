@@ -6,9 +6,14 @@ export class PoolFullError extends Error {
   constructor() { super('pool penuh'); }
 }
 
+/** Thrown by revokeLease when the lease is not ACTIVE (already revoked/expired, or missing). */
+export class LeaseNotActiveError extends Error {
+  constructor() { super('lease tidak aktif'); }
+}
+
 function tx<T>(db: DatabaseSync, fn: () => T): T {
   db.exec('BEGIN IMMEDIATE');
-  try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { db.exec('ROLLBACK'); throw e; }
+  try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { if (db.isTransaction) db.exec('ROLLBACK'); throw e; }
 }
 
 /** Callers do the policy checks. UNIQUE violations (user_id / tunnel_ip) propagate as-is. */
@@ -35,10 +40,11 @@ export function createLease(db: DatabaseSync, p: {
   });
 }
 
-/** Caller checks ownership and that the lease is ACTIVE. */
+/** Caller checks ownership. Throws LeaseNotActiveError (nothing written) unless the lease is ACTIVE. */
 export function revokeLease(db: DatabaseSync, p: { leaseId: number; by: string; reason: string; nowMs: number }): void {
   tx(db, () => {
-    db.prepare("UPDATE leases SET status='REVOKED', revoked_at=?, revoked_by=?, reason=? WHERE id=?").run(p.nowMs, p.by, p.reason, p.leaseId);
+    const { changes } = db.prepare("UPDATE leases SET status='REVOKED', revoked_at=?, revoked_by=?, reason=? WHERE id=? AND status='ACTIVE'").run(p.nowMs, p.by, p.reason, p.leaseId);
+    if (changes === 0) throw new LeaseNotActiveError();
     const l = db.prepare('SELECT l.lab_id, l.tunnel_ip, u.email FROM leases l JOIN users u ON u.id=l.user_id WHERE l.id=?').get(p.leaseId) as
       { lab_id: string; tunnel_ip: string; email: string };
     db.prepare('INSERT INTO audit_log(lease_id,action,actor,at,detail) VALUES(?,?,?,?,?)').run(

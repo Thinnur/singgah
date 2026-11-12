@@ -6,12 +6,13 @@ import type { ApiError } from './types.ts';
 import { HttpError } from './session.ts';
 import { authRoutes } from './auth.ts';
 import { leaseRoutes } from './leases.ts';
+import { adminRoutes } from './admin.ts';
 
 // staticDir is accepted now; static serving is added in a later task.
-export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof fetch; now?: () => number; staticDir?: string }): FastifyInstance {
+export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof fetch; now?: () => number; staticDir?: string; sysNetDir?: string }): FastifyInstance {
   const app = Fastify({ logger: false, trustProxy: false });
   app.register(cookie);
-  app.decorate('ctx', { db: o.db, config: o.config, fetchFn: o.fetchFn ?? fetch, now: o.now ?? Date.now });
+  app.decorate('ctx', { db: o.db, config: o.config, fetchFn: o.fetchFn ?? fetch, now: o.now ?? Date.now, sysNetDir: o.sysNetDir ?? '/sys/class/net' });
 
   app.removeContentTypeParser('application/json');
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
@@ -41,5 +42,6 @@ export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof
 
   authRoutes(app);
   leaseRoutes(app);
+  adminRoutes(app);
   return app;
 }

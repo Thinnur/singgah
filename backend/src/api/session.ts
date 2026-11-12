@@ -4,7 +4,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import type { Config } from '../config.ts';
 
 export const SESSION_MS = 12 * 3600_000;
-export type Ctx = { db: DatabaseSync; config: Config; fetchFn: typeof fetch; now: () => number };
+export type Ctx = { db: DatabaseSync; config: Config; fetchFn: typeof fetch; now: () => number; sysNetDir: string };
 export type SessionUser = { id: number; email: string; name: string; role: 'student' | 'admin' };
 
 declare module 'fastify' {
