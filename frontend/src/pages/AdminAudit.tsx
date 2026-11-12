@@ -64,7 +64,7 @@ export default function AdminAudit() {
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
 
       <div className="panel overflow-x-auto">
-        <table className="w-full min-w-[820px]">
+        <table className="rtable md:min-w-[820px]">
           <thead className="border-b border-line bg-mist/60">
             <tr>
               <th className="th">Waktu</th>
@@ -76,18 +76,18 @@ export default function AdminAudit() {
               <th className="th">Keterangan</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-line">
+          <tbody>
             {rows?.map((r) => {
               const [label, cls] = ACTION[r.action] ?? [r.action, 'bg-mist text-muted'];
               return (
                 <tr key={r.id}>
-                  <td className="td whitespace-nowrap tabular-nums">{formatDateTime(r.at)}</td>
-                  <td className="td"><span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${cls}`}>{label}</span></td>
-                  <td className="td">{String(r.detail.email ?? '')}</td>
-                  <td className="td tabular-nums">{String(r.detail.tunnelIp ?? '')}</td>
-                  <td className="td">{String(r.detail.labId ?? '')}</td>
-                  <td className="td text-muted">{r.actor}</td>
-                  <td className="td text-muted">{detailText(r.detail)}</td>
+                  <td data-label="Waktu" className="tabular-nums md:whitespace-nowrap">{formatDateTime(r.at)}</td>
+                  <td data-label="Kejadian"><span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${cls}`}>{label}</span></td>
+                  <td data-label="Email" className="max-md:col-span-2">{String(r.detail.email ?? '')}</td>
+                  <td data-label="IP tunnel" className="tabular-nums">{String(r.detail.tunnelIp ?? '')}</td>
+                  <td data-label="Lab">{String(r.detail.labId ?? '')}</td>
+                  <td data-label="Oleh" className="text-muted max-md:col-span-2">{r.actor}</td>
+                  <td data-label="Keterangan" className="text-muted max-md:col-span-2">{detailText(r.detail)}</td>
                 </tr>
               );
             })}

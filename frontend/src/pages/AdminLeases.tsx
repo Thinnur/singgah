@@ -59,7 +59,7 @@ export default function AdminLeases() {
       {error && <div className="mb-4"><Alert>{error}</Alert></div>}
 
       <div className="panel overflow-x-auto">
-        <table className="w-full min-w-[720px]">
+        <table className="rtable md:min-w-[720px]">
           <thead className="border-b border-line bg-mist/60">
             <tr>
               <th className="th">Pemohon</th>
@@ -71,19 +71,19 @@ export default function AdminLeases() {
               {status === 'ACTIVE' && <th className="th"><span className="sr-only">Aksi</span></th>}
             </tr>
           </thead>
-          <tbody className="divide-y divide-line">
+          <tbody>
             {rows?.map((l) => (
               <tr key={l.id}>
-                <td className="td">
+                <td className="max-md:col-span-2">
                   <span className="block font-medium">{l.email}</span>
                   {l.requesterIp && <span className="block text-xs text-muted">dari {l.requesterIp}</span>}
                 </td>
-                <td className="td">
+                <td className="max-md:col-span-2">
                   <span className="block">{l.labName}</span>
                   <span className="block text-xs text-muted">{l.labId}</span>
                 </td>
-                <td className="td tabular-nums">{l.tunnelIp}</td>
-                <td className="td tabular-nums">
+                <td data-label="IP tunnel" className="tabular-nums">{l.tunnelIp}</td>
+                <td data-label={status === 'ACTIVE' ? 'Sisa waktu' : 'Selesai'} className="tabular-nums">
                   {status === 'ACTIVE' ? (
                     <>
                       <span className="block font-semibold">{formatRemaining(l.expiresAt - now)}</span>
@@ -98,12 +98,12 @@ export default function AdminLeases() {
                     </>
                   )}
                 </td>
-                <td className="td text-right tabular-nums">{formatBytes(l.bytesRx)}</td>
-                <td className="td text-right tabular-nums">{formatBytes(l.bytesTx)}</td>
+                <td data-label="Diunggah" className="tabular-nums md:text-right">{formatBytes(l.bytesRx)}</td>
+                <td data-label="Diunduh" className="tabular-nums md:text-right">{formatBytes(l.bytesTx)}</td>
                 {status === 'ACTIVE' && (
-                  <td className="td text-right">
+                  <td className="max-md:col-span-2 md:text-right">
                     <button
-                      type="button" className="btn btn-ghost min-h-9 px-3 text-stop hover:bg-red-50"
+                      type="button" className="btn btn-ghost min-h-9 w-full px-3 text-stop hover:bg-red-50 md:w-auto"
                       onClick={() => { setRevokeError(''); setTarget(l); }}
                     >
                       Cabut

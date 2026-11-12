@@ -57,7 +57,7 @@ export default function AdminLabs() {
         </PageHead>
         {error && <div className="mb-4"><Alert>{error}</Alert></div>}
         <div className="panel overflow-x-auto">
-          <table className="w-full min-w-[640px]">
+          <table className="rtable md:min-w-[640px]">
             <thead className="border-b border-line bg-mist/60">
               <tr>
                 <th className="th">Lab</th>
@@ -67,22 +67,22 @@ export default function AdminLabs() {
                 <th className="th"><span className="sr-only">Aksi</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-line">
+            <tbody>
               {labs?.map((l) => edit?.id === l.id ? (
                 <tr key={l.id} className="bg-mist/40">
-                  <td className="td">
+                  <td className="max-md:col-span-2">
                     <label htmlFor={`name-${l.id}`} className="sr-only">Nama lab</label>
                     <input id={`name-${l.id}`} className="field" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
                     <span className="mt-1 block text-xs text-muted">{l.id}</span>
                   </td>
-                  <td className="td tabular-nums">{l.targetCidr}</td>
-                  <td className="td">
+                  <td data-label="CIDR tujuan" className="tabular-nums">{l.targetCidr}</td>
+                  <td>
                     <label htmlFor={`hours-${l.id}`} className="sr-only">Durasi maksimal</label>
                     <HoursSelect id={`hours-${l.id}`} value={edit.maxHours} onChange={(h) => setEdit({ ...edit, maxHours: h })} />
                   </td>
-                  <td className="td" />
-                  <td className="td">
-                    <div className="flex justify-end gap-2">
+                  <td />
+                  <td className="max-md:col-span-2">
+                    <div className="flex gap-2 md:justify-end">
                       <button type="button" className="btn btn-ghost min-h-9 px-3" onClick={() => setEdit(null)}>Batal</button>
                       <button type="button" className="btn btn-primary min-h-9 px-3" onClick={() => patch(l.id, { name: edit.name, maxHours: edit.maxHours })}>Simpan</button>
                     </div>
@@ -90,20 +90,20 @@ export default function AdminLabs() {
                 </tr>
               ) : (
                 <tr key={l.id}>
-                  <td className="td">
+                  <td className="max-md:col-span-2">
                     <span className="block font-medium">{l.name}</span>
                     <span className="block text-xs text-muted">{l.id}</span>
                   </td>
-                  <td className="td tabular-nums">{l.targetCidr}</td>
-                  <td className="td">{l.maxHours} jam</td>
-                  <td className="td">
+                  <td data-label="CIDR tujuan" className="tabular-nums">{l.targetCidr}</td>
+                  <td data-label="Durasi maksimal">{l.maxHours} jam</td>
+                  <td data-label="Status">
                     <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${l.isActive ? 'text-go' : 'text-muted'}`}>
                       <span className={`size-2 rounded-full ${l.isActive ? 'bg-go' : 'bg-line'}`} aria-hidden="true" />
                       {l.isActive ? 'Aktif' : 'Nonaktif'}
                     </span>
                   </td>
-                  <td className="td">
-                    <div className="flex justify-end gap-2">
+                  <td className="max-md:col-span-2">
+                    <div className="flex gap-2 md:justify-end">
                       <button type="button" className="btn btn-ghost min-h-9 px-3" onClick={() => setEdit({ id: l.id, name: l.name, maxHours: l.maxHours })}>Ubah</button>
                       <button type="button" className="btn btn-ghost min-h-9 px-3" onClick={() => patch(l.id, { isActive: !l.isActive })}>
                         {l.isActive ? 'Nonaktifkan' : 'Aktifkan'}
