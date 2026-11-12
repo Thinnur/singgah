@@ -9,7 +9,7 @@ export function labsWithRule(nftJson: string): Set<string> {
     rule?.chain === 'forward' && rule.comment?.startsWith('singgah:') ? [rule.comment.slice('singgah:'.length)] : []));
 }
 
-/** One `nft -f -` script (applied atomically) that makes every lab's set hold exactly `desired` IPs. */
+/** One nft script (applied atomically, one transaction) that makes every lab's set hold exactly `desired` IPs. */
 export function buildNftScript(labs: { id: string; target_cidr: string }[], desired: Map<string, string[]>, haveRule: Set<string>): string {
   return labs.flatMap(({ id, target_cidr }) => {
     const set = labSetName(id);
