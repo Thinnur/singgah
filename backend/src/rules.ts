@@ -86,16 +86,20 @@ export function allocateIp(taken: Set<string>): string | null {
   return null;
 }
 
-export function parseCidr(c: string): { net: number; bits: number } {
-  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/.exec(c);
+// No leading zeros: nft reads them as octal (192.168.012.0 = 192.168.10.0).
+const OCTET = '(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)';
+const CIDR = new RegExp(`^${OCTET}\\.${OCTET}\\.${OCTET}\\.${OCTET}\\/(3[0-2]|[12]?\\d)$`);
+
+/** cidr = canonical text, the only form stored and handed to nft. */
+export function parseCidr(c: string): { net: number; bits: number; cidr: string } {
+  const m = CIDR.exec(c);
   if (!m) throw new Error(`CIDR tidak valid: ${c}`);
   const o = m.slice(1, 5).map(Number);
   const bits = Number(m[5]);
-  if (o.some((x) => x > 255) || bits > 32) throw new Error(`CIDR tidak valid: ${c}`);
   const net = ((o[0] << 24) | (o[1] << 16) | (o[2] << 8) | o[3]) >>> 0;
   const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
   if ((net & mask) >>> 0 !== net) throw new Error(`CIDR punya host bit: ${c}`);
-  return { net, bits };
+  return { net, bits, cidr: `${o.join('.')}/${bits}` };
 }
 
 export function cidrOverlaps(a: string, b: string): boolean {

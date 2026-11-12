@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { tx } from '../leasestore.ts';
+import { leaseTimes, tx } from '../leasestore.ts';
 import { parseCidr } from '../rules.ts';
 import { isWgPubkey } from '../wgkeys.ts';
 import { buildNftScript, labsWithRule } from './nft.ts';
@@ -78,9 +78,10 @@ export async function reconcileOnce(db: DatabaseSync, sys: Sys, nowMs: number): 
   }
 
   // 6. Install desired leases that are missing or have the wrong allowed-ips.
+  // Not when nft failed: s5gw may be missing, and a new peer would reach the laptop unfiltered.
   const peerOf = new Map(peers.map((p) => [p.publicKey, p]));
   const markInstalled = db.prepare('UPDATE leases SET installed_at=?, wg_rx_seen=0, wg_tx_seen=0 WHERE id=?');
-  for (const l of desired) {
+  for (const l of nftOk ? desired : []) {
     const peer = peerOf.get(l.client_pubkey);
     if (peer?.allowedIps.join() === `${l.tunnel_ip}/32`) continue;
     try {
@@ -93,7 +94,7 @@ export async function reconcileOnce(db: DatabaseSync, sys: Sys, nowMs: number): 
   // 7. Close leases whose peer is gone. Not when nft failed: their set elements may still be there.
   if (!nftOk) return res;
   const close = db.prepare('UPDATE leases SET status=?, ended_at=? WHERE id=? AND status=? AND ended_at IS NULL');
-  const info = db.prepare('SELECT l.bytes_rx, l.bytes_tx, u.email FROM leases l JOIN users u ON u.id=l.user_id WHERE l.id=?');
+  const info = db.prepare('SELECT l.bytes_rx, l.bytes_tx, l.starts_at, l.expires_at, u.email FROM leases l JOIN users u ON u.id=l.user_id WHERE l.id=?');
   const audit = db.prepare("INSERT INTO audit_log(lease_id,action,actor,at,detail) VALUES(?,?,'worker',?,?)");
   for (const l of open) {
     if (present.has(l.client_pubkey)) continue;
@@ -103,8 +104,8 @@ export async function reconcileOnce(db: DatabaseSync, sys: Sys, nowMs: number): 
       const done = tx(db, () => {
         // 0 rows = the API changed the lease since step 2; next cycle sees the new state
         if (close.run(action === 'EXPIRED' ? 'EXPIRED' : 'REVOKED', nowMs, l.id, l.status).changes === 0) return false;
-        const d = info.get(l.id) as { bytes_rx: number; bytes_tx: number; email: string };
-        audit.run(l.id, action, nowMs, JSON.stringify({ email: d.email, tunnelIp: l.tunnel_ip, labId: l.lab_id, bytesRx: d.bytes_rx, bytesTx: d.bytes_tx }));
+        const d = info.get(l.id) as { bytes_rx: number; bytes_tx: number; starts_at: number; expires_at: number; email: string };
+        audit.run(l.id, action, nowMs, JSON.stringify({ email: d.email, tunnelIp: l.tunnel_ip, labId: l.lab_id, ...leaseTimes(d), bytesRx: d.bytes_rx, bytesTx: d.bytes_tx }));
         return true;
       });
       if (done) res.closed++;

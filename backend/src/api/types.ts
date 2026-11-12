@@ -15,7 +15,8 @@ export type AuditEntry = {
 };
 export type Stats = {
   activeLeases: number;
-  perLab: { labId: string; labName: string; leases: number; minutes: number }[];
+  // leases/minutes = all-time history (minutes used, not booked); activeLeases = ACTIVE now
+  perLab: { labId: string; labName: string; leases: number; activeLeases: number; minutes: number }[];
   wg0: { rxBps: number; txBps: number } | null;
 };
 export type AdminLab = { id: string; name: string; targetCidr: string; maxHours: number; isActive: boolean; createdAt: number };

@@ -24,7 +24,7 @@ export function adminRoutes(app: FastifyInstance): void {
     if (!['ACTIVE', 'EXPIRED', 'REVOKED'].includes(status)) throw bad('status harus ACTIVE, EXPIRED, atau REVOKED');
     const rows = db.prepare(
       `SELECT ${LEASE_COLS}, u.email, l.requester_ip FROM leases l JOIN labs b ON b.id=l.lab_id JOIN users u ON u.id=l.user_id
-       WHERE l.status=? ORDER BY l.expires_at`,
+       WHERE l.status=? ${status === 'ACTIVE' ? 'ORDER BY l.expires_at' : 'ORDER BY l.starts_at DESC, l.id DESC LIMIT 500'}`,
     ).all(status) as (LeaseRow & { email: string; requester_ip: string | null })[];
     return rows.map((r) => ({ ...leaseView(r), email: r.email, requesterIp: r.requester_ip }));
   });
@@ -53,11 +53,12 @@ export function adminRoutes(app: FastifyInstance): void {
     if (!nonBlank(name)) throw bad('Nama lab wajib diisi');
     if (!validHours(maxHours)) throw bad('maxHours harus 1, 2, atau 4');
     if (typeof targetCidr !== 'string') throw bad('targetCidr wajib diisi');
-    try { parseCidr(targetCidr); } catch { throw bad('targetCidr bukan CIDR yang valid (contoh 192.168.40.0/24)'); }
-    if (RESERVED_CIDRS.some((c) => cidrOverlaps(targetCidr, c))) throw bad('targetCidr bentrok dengan jaringan yang dicadangkan');
+    let cidr: string;
+    try { ({ cidr } = parseCidr(targetCidr)); } catch { throw bad('targetCidr bukan CIDR yang valid (contoh 192.168.40.0/24)'); }
+    if (RESERVED_CIDRS.some((c) => cidrOverlaps(cidr, c))) throw bad('targetCidr bentrok dengan jaringan yang dicadangkan');
     const labs = db.prepare('SELECT target_cidr FROM labs').all() as { target_cidr: string }[];
-    if (labs.some((l) => cidrOverlaps(targetCidr, l.target_cidr))) throw bad('targetCidr bentrok dengan lab lain');
-    db.prepare('INSERT INTO labs(id,name,target_cidr,max_hours,is_active,created_at) VALUES(?,?,?,?,1,?)').run(id, name.trim(), targetCidr, maxHours, ctx.now());
+    if (labs.some((l) => cidrOverlaps(cidr, l.target_cidr))) throw bad('targetCidr bentrok dengan lab lain');
+    db.prepare('INSERT INTO labs(id,name,target_cidr,max_hours,is_active,created_at) VALUES(?,?,?,?,1,?)').run(id, name.trim(), cidr, maxHours, ctx.now());
     return reply.status(201).send(labView(getLab(id)!));
   });
 
@@ -114,11 +115,12 @@ export function adminRoutes(app: FastifyInstance): void {
 
   app.get('/api/admin/stats', async (req): Promise<Stats> => {
     requireAdmin(req);
+    // Usage history: every lease, counted up to now / revoke / expiry, whichever is first.
     const perLab = db.prepare(
-      `SELECT b.id AS labId, b.name AS labName, count(l.id) AS leases,
-         COALESCE(sum((l.expires_at - l.starts_at)/60000),0) AS minutes
-       FROM labs b LEFT JOIN leases l ON l.lab_id=b.id AND l.status='ACTIVE' GROUP BY b.id ORDER BY b.id`,
-    ).all() as Stats['perLab'];
-    return { activeLeases: perLab.reduce((a, l) => a + l.leases, 0), perLab, wg0: wg0Rates() };
+      `SELECT b.id AS labId, b.name AS labName, count(l.id) AS leases, COALESCE(sum(l.status='ACTIVE'),0) AS activeLeases,
+         CAST(COALESCE(sum(max(0, min(?, COALESCE(l.revoked_at, l.expires_at), l.expires_at) - l.starts_at)),0) / 60000 AS INTEGER) AS minutes
+       FROM labs b LEFT JOIN leases l ON l.lab_id=b.id GROUP BY b.id ORDER BY b.id`,
+    ).all(ctx.now()) as Stats['perLab'];
+    return { activeLeases: perLab.reduce((a, l) => a + l.activeLeases, 0), perLab, wg0: wg0Rates() };
   });
 }

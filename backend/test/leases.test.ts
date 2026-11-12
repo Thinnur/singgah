@@ -93,7 +93,7 @@ test('pool full -> 503', async () => {
   await t.done();
 });
 
-test('release: owner only, audit, IP not reused until ended', async () => {
+test('release: owner only, audit, IP not reused and no new lease until ended', async () => {
   const t = setup();
   const a = t.user('a@ugm.ac.id');
   const o = t.user('o@ugm.ac.id');
@@ -107,9 +107,16 @@ test('release: owner only, audit, IP not reused until ended', async () => {
   assert.equal(au.length, 1);
   assert.equal(au[0].actor, 'a@ugm.ac.id');
   assert.equal((await rel(a)).statusCode, 409);
-  const again = await t.issue(a);
-  assert.equal(again.statusCode, 201);
-  assert.notEqual(again.json().lease.tunnelIp, lease.tunnelIp);
+  // until the worker closes it (ended_at), the old lease still holds its IP: no new lease for the same user
+  const early = await t.issue(a);
+  assert.equal(early.statusCode, 409);
+  assert.equal(early.json().code, 'PREV_CLOSING');
+  assert.match(early.json().message, /masih ditutup/);
+  const other = await t.issue(o);
+  assert.equal(other.statusCode, 201);
+  assert.notEqual(other.json().lease.tunnelIp, lease.tunnelIp);
+  t.db.prepare('UPDATE leases SET ended_at=? WHERE id=?').run(NOW, lease.id);
+  assert.equal((await t.issue(a)).statusCode, 201);
   await t.done();
 });
 

@@ -11,6 +11,10 @@ export class LeaseNotActiveError extends Error {
   constructor() { super('lease tidak aktif'); }
 }
 
+/** Booked duration and window, for audit details. */
+export const leaseTimes = (l: { starts_at: number; expires_at: number }) =>
+  ({ minutes: (l.expires_at - l.starts_at) / 60_000, startsAt: l.starts_at, expiresAt: l.expires_at });
+
 export function tx<T>(db: DatabaseSync, fn: () => T): T {
   db.exec('BEGIN IMMEDIATE');
   try { const r = fn(); db.exec('COMMIT'); return r; } catch (e) { if (db.isTransaction) db.exec('ROLLBACK'); throw e; }
@@ -45,11 +49,11 @@ export function revokeLease(db: DatabaseSync, p: { leaseId: number; by: string; 
   tx(db, () => {
     const { changes } = db.prepare("UPDATE leases SET status='REVOKED', revoked_at=?, revoked_by=?, reason=? WHERE id=? AND status='ACTIVE'").run(p.nowMs, p.by, p.reason, p.leaseId);
     if (changes === 0) throw new LeaseNotActiveError();
-    const l = db.prepare('SELECT l.lab_id, l.tunnel_ip, u.email FROM leases l JOIN users u ON u.id=l.user_id WHERE l.id=?').get(p.leaseId) as
-      { lab_id: string; tunnel_ip: string; email: string };
+    const l = db.prepare('SELECT l.lab_id, l.tunnel_ip, l.starts_at, l.expires_at, u.email FROM leases l JOIN users u ON u.id=l.user_id WHERE l.id=?').get(p.leaseId) as
+      { lab_id: string; tunnel_ip: string; starts_at: number; expires_at: number; email: string };
     db.prepare('INSERT INTO audit_log(lease_id,action,actor,at,detail) VALUES(?,?,?,?,?)').run(
       p.leaseId, 'REVOKED', p.by, p.nowMs,
-      JSON.stringify({ email: l.email, tunnelIp: l.tunnel_ip, labId: l.lab_id, reason: p.reason }),
+      JSON.stringify({ email: l.email, tunnelIp: l.tunnel_ip, labId: l.lab_id, ...leaseTimes(l), reason: p.reason }),
     );
   });
 }

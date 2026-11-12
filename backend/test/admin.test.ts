@@ -50,6 +50,12 @@ test('list leases: default ACTIVE with email, status filter', async () => {
   const e = await t.app.inject({ url: '/api/admin/leases?status=EXPIRED', cookies: t.admin.cookies });
   assert.deepEqual(e.json(), []);
   assert.equal((await t.app.inject({ url: '/api/admin/leases?status=X', cookies: t.admin.cookies })).statusCode, 400);
+  // history: newest first
+  const ins = t.db.prepare("INSERT INTO leases(user_id,lab_id,tunnel_ip,client_pubkey,status,starts_at,expires_at,ended_at) VALUES(?,'lab-cyber',?,?,'EXPIRED',?,?,?)");
+  ins.run(t.admin.id, '10.8.0.50', 'old', NOW - 7200_000, NOW - 3600_000, NOW - 3600_000);
+  ins.run(t.admin.id, '10.8.0.51', 'new', NOW - 3600_000, NOW, NOW);
+  const h = await t.app.inject({ url: '/api/admin/leases?status=EXPIRED', cookies: t.admin.cookies });
+  assert.deepEqual(h.json().map((l: { tunnelIp: string }) => l.tunnelIp), ['10.8.0.51', '10.8.0.50']);
   await t.done();
 });
 
@@ -65,7 +71,9 @@ test('revoke: blank reason 400, valid -> REVOKED + audit, again -> 409', async (
   assert.deepEqual({ ...l }, { status: 'REVOKED', revoked_by: 'adm@ugm.ac.id', reason: 'Menyalahgunakan' });
   const a = t.db.prepare("SELECT actor,detail FROM audit_log WHERE action='REVOKED'").get() as { actor: string; detail: string };
   assert.equal(a.actor, 'adm@ugm.ac.id');
-  assert.equal(JSON.parse(a.detail).reason, 'Menyalahgunakan');
+  const d = JSON.parse(a.detail);
+  assert.equal(d.reason, 'Menyalahgunakan');
+  assert.deepEqual([d.minutes, d.startsAt, d.expiresAt], [60, NOW, NOW + 3600_000]);
   assert.equal((await post({ reason: 'lagi' })).statusCode, 409);
   assert.equal((await t.app.inject({ method: 'POST', url: '/api/admin/leases/999/revoke', cookies: t.admin.cookies, headers: J, payload: { reason: 'x' } })).statusCode, 404);
   await t.done();
@@ -78,12 +86,19 @@ test('labs: add validation', async () => {
   const r = await add(ok);
   assert.equal(r.statusCode, 201);
   assert.equal(r.json().targetCidr, '192.168.40.0/24');
+  assert.equal((t.db.prepare("SELECT target_cidr FROM labs WHERE id='lab-baru'").get() as { target_cidr: string }).target_cidr, '192.168.40.0/24');
   assert.equal(r.json().isActive, true);
   assert.equal((await add(ok)).statusCode, 409);
   const bad = (o: object) => add({ ...ok, id: 'lab-x2', targetCidr: '192.168.50.0/24', ...o });
   assert.equal((await bad({ targetCidr: '192.168.20.0/25' })).statusCode, 400); // overlaps lab-cyber
   assert.equal((await bad({ targetCidr: '172.18.0.0/16' })).statusCode, 400); // docker
   assert.equal((await bad({ targetCidr: 'nope' })).statusCode, 400);
+  // leading zeros: nft would read them as octal (192.168.012.0 = lab-cloud's 192.168.10.0)
+  for (const targetCidr of ['192.168.012.0/24', '010.0.0.0/8']) {
+    const z = await bad({ targetCidr });
+    assert.equal(z.statusCode, 400, targetCidr);
+    assert.match(z.json().message, /bukan CIDR yang valid/, targetCidr);
+  }
   assert.equal((await bad({ id: 'Lab_X' })).statusCode, 400);
   assert.equal((await bad({ id: 'lab-' + 'a'.repeat(21) })).statusCode, 400);
   assert.equal((await bad({ maxHours: 3 })).statusCode, 400);
@@ -130,13 +145,26 @@ test('audit: filters by ip, email, from/to; newest first', async () => {
   await t.done();
 });
 
-test('stats: counts and wg0 throughput from injected sysfs', async () => {
+test('stats: usage history per lab, active count, wg0 throughput from injected sysfs', async () => {
   const t = setup();
-  await t.issue(t.stu);
   const stats = async () => (await t.app.inject({ url: '/api/admin/stats', cookies: t.admin.cookies })).json();
+  const cyber = (s: { perLab: { labId: string }[] }) => s.perLab.find((l) => l.labId === 'lab-cyber');
+  const id = (await t.issue(t.stu)).json().lease.id;
+  NOW += 30 * 60_000;
   let s = await stats();
   assert.equal(s.activeLeases, 1);
-  assert.deepEqual(s.perLab.find((l: { labId: string }) => l.labId === 'lab-cyber'), { labId: 'lab-cyber', labName: 'Lab Cyber Security', leases: 1, minutes: 60 });
+  assert.deepEqual(cyber(s), { labId: 'lab-cyber', labName: 'Lab Cyber Security', leases: 1, activeLeases: 1, minutes: 30 });
+  assert.deepEqual(s.perLab.find((l: { labId: string }) => l.labId === 'lab-cloud'), { labId: 'lab-cloud', labName: 'Lab Cloud Computing', leases: 0, activeLeases: 0, minutes: 0 });
+  // revoked after 30 min, then worker closed it; a second user's lease expired after its full 60 min
+  await t.app.inject({ method: 'POST', url: `/api/admin/leases/${id}/revoke`, cookies: t.admin.cookies, headers: J, payload: { reason: 'x' } });
+  t.db.prepare('UPDATE leases SET ended_at=? WHERE id=?').run(NOW, id);
+  const o = t.user('o@ugm.ac.id', 'student');
+  t.db.prepare("INSERT INTO leases(user_id,lab_id,tunnel_ip,client_pubkey,status,starts_at,expires_at,ended_at) VALUES(?,'lab-cyber','10.8.0.60','k60','EXPIRED',?,?,?)")
+    .run(o.id, NOW - 3 * 3600_000, NOW - 2 * 3600_000, NOW - 2 * 3600_000);
+  NOW += 60 * 60_000;
+  s = await stats();
+  assert.equal(s.activeLeases, 0);
+  assert.deepEqual(cyber(s), { labId: 'lab-cyber', labName: 'Lab Cyber Security', leases: 2, activeLeases: 0, minutes: 90 });
   assert.equal(s.wg0, null); // no files
   const w = (rx: number, tx: number) => {
     mkdirSync(join(t.sysNetDir, 'wg0', 'statistics'), { recursive: true });

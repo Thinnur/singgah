@@ -117,7 +117,7 @@ test('expired lease: bytes saved before wgRemovePeer, status EXPIRED, ended_at, 
   assert.equal(l.ended_at, now);
   assert.deepEqual(t.audits('EXPIRED'), [{
     lease_id: a.id, actor: 'worker', at: now,
-    detail: { email: a.email, tunnelIp: '10.8.0.2', labId: 'lab-cyber', bytesRx: 100, bytesTx: 200 },
+    detail: { email: a.email, tunnelIp: '10.8.0.2', labId: 'lab-cyber', minutes: 60, startsAt: a.startsAt, expiresAt: a.expiresAt, bytesRx: 100, bytesTx: 200 },
   }]);
   assert.doesNotMatch(f.scripts.at(-1)!, /add element/);
   t.done();
@@ -140,7 +140,7 @@ test('REVOKED lease: peer removed, ended_at set, CLOSED audit with bytes, status
   assert.equal(l.ended_at, now);
   assert.deepEqual(t.audits('CLOSED'), [{
     lease_id: a.id, actor: 'worker', at: now,
-    detail: { email: a.email, tunnelIp: '10.8.0.2', labId: 'lab-cyber', bytesRx: 7, bytesTx: 9 },
+    detail: { email: a.email, tunnelIp: '10.8.0.2', labId: 'lab-cyber', minutes: 60, startsAt: a.startsAt, expiresAt: a.expiresAt, bytesRx: 7, bytesTx: 9 },
   }]);
   t.done();
 });
@@ -260,6 +260,24 @@ for (const which of ['list', 'apply'] as const) {
   });
 }
 
+test('nft sync fails: a new lease is NOT installed (s5gw may be missing = unfiltered), removals still happen; installed next cycle', async () => {
+  const t = setup();
+  const f = fakeSys();
+  f.peers.set(key(99), { ip: '10.8.0.200', rx: 0, tx: 0 }); // orphan
+  const a = t.lease();
+  f.fail.apply = true;
+  const r = await reconcileOnce(t.db, f.sys, T0);
+  assert.deepEqual([r.installed, r.removed, r.errors.length], [0, 1, 1]);
+  assert.ok(!f.calls.some((c) => c.startsWith('set ')), f.calls.join('\n'));
+  assert.equal(t.row(a.id).installed_at, null);
+
+  f.fail.apply = false;
+  const r2 = await reconcileOnce(t.db, f.sys, T0 + 1000);
+  assert.deepEqual(r2, { installed: 1, removed: 0, closed: 0, errors: [] });
+  assert.equal(t.row(a.id).installed_at, T0 + 1000);
+  t.done();
+});
+
 test('peer removal fails: lease not closed, retried next cycle', async () => {
   const t = setup();
   const f = fakeSys();
@@ -287,7 +305,7 @@ test('REVOKED with no peer installed (after reboot): closed right away with the 
   const r = await reconcileOnce(t.db, f.sys, T0 + 2000);
   assert.deepEqual(r, { installed: 0, removed: 0, closed: 1, errors: [] });
   assert.equal(t.row(a.id).ended_at, T0 + 2000);
-  assert.deepEqual(t.audits('CLOSED').map((x) => x.detail), [{ email: a.email, tunnelIp: '10.8.0.2', labId: 'lab-cyber', bytesRx: 1234, bytesTx: 567 }]);
+  assert.deepEqual(t.audits('CLOSED').map((x) => x.detail), [{ email: a.email, tunnelIp: '10.8.0.2', labId: 'lab-cyber', minutes: 60, startsAt: a.startsAt, expiresAt: a.expiresAt, bytesRx: 1234, bytesTx: 567 }]);
   t.done();
 });
 
@@ -296,12 +314,14 @@ test('tampered rows (bad lab id / tunnel IP) never reach wg or nft', async () =>
   const f = fakeSys();
   // the GLOB CHECK on labs.id lets this through; the API regex would not
   t.db.prepare(`INSERT INTO labs(id,name,target_cidr) VALUES('lab-x"; flush ruleset','x','10.0.0.0/8')`).run();
+  // nft would read 012 as octal 10 (lab-cloud's subnet)
+  t.db.prepare(`INSERT INTO labs(id,name,target_cidr) VALUES('lab-oct','x','192.168.012.0/24')`).run();
   const a = t.lease();
   t.db.prepare("UPDATE leases SET tunnel_ip='0.0.0.0/0' WHERE id=?").run(a.id);
   const r = await reconcileOnce(t.db, f.sys, T0);
   assert.equal(r.installed, 0);
-  assert.equal(r.errors.length, 2);
+  assert.equal(r.errors.length, 3);
   assert.ok(!f.calls.some((c) => c.startsWith('set ')));
-  assert.doesNotMatch(f.scripts[0], /flush ruleset|0\.0\.0\.0/);
+  assert.doesNotMatch(f.scripts[0], /flush ruleset|0\.0\.0\.0|lab_oct|012/);
   t.done();
 });

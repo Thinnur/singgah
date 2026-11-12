@@ -35,6 +35,11 @@ export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof
     }
   });
 
+  app.addHook('onSend', async (_req, reply, payload) => {
+    reply.header('Content-Security-Policy', "frame-ancestors 'none'").header('X-Frame-Options', 'DENY').header('Referrer-Policy', 'no-referrer');
+    return payload;
+  });
+
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
     const e = err instanceof HttpError
       ? { status: err.status, body: { code: err.code, message: err.message } }

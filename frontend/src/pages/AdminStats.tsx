@@ -42,13 +42,13 @@ export default function AdminStats() {
 
           <section className="panel p-5 sm:p-6">
             <h2 className="text-lg font-bold">Pemakaian per lab</h2>
-            <p className="mt-1 text-sm text-muted">Jumlah lease aktif dan total durasi yang dipesan.</p>
+            <p className="mt-1 text-sm text-muted">Riwayat semua lease: jumlah lease, yang sedang aktif, dan total waktu terpakai (sampai dilepas, dicabut, atau habis).</p>
             <ul className="mt-5 space-y-4">
               {stats.perLab.map((l) => (
                 <li key={l.labId}>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-4 text-sm">
                     <span className="font-semibold">{l.labName} <span className="font-normal text-muted">{l.labId}</span></span>
-                    <span className="tabular-nums text-muted">{l.leases} lease, {formatMinutes(l.minutes)}</span>
+                    <span className="tabular-nums text-muted">{l.leases} lease ({l.activeLeases} aktif), terpakai {formatMinutes(l.minutes)}</span>
                   </div>
                   <div className="mt-2 h-2 overflow-hidden rounded-full bg-mist" aria-hidden="true">
                     <div className="h-full rounded-full bg-ink" style={{ width: `${(l.minutes / maxMinutes) * 100}%` }} />

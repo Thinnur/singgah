@@ -65,4 +65,8 @@ test('cidr', () => {
   assert.throws(() => parseCidr('300.1.1.0/24'));
   assert.throws(() => parseCidr('10.0.0.0/33'));
   assert.throws(() => parseCidr('abc'));
+  // nft reads a leading-zero octet as octal (192.168.012.0 = 192.168.10.0)
+  for (const c of ['192.168.012.0/24', '010.0.0.0/8', '192.168.08.0/24', '10.0.0.0/08', '192.168.40.00/24']) assert.throws(() => parseCidr(c), c);
+  assert.equal(parseCidr('192.168.40.0/24').cidr, '192.168.40.0/24');
+  assert.equal(parseCidr('0.0.0.0/0').cidr, '0.0.0.0/0');
 });

@@ -47,13 +47,15 @@ export function leaseRoutes(app: FastifyInstance): void {
     const now = ctx.now();
     const lab = db.prepare('SELECT id,name,target_cidr,max_hours,is_active FROM labs WHERE id=?').get(labId) as
       { id: string; name: string; target_cidr: string; max_hours: number; is_active: number } | undefined;
-    const mine = db.prepare('SELECT starts_at,expires_at,revoked_at,status FROM leases WHERE user_id=?').all(u.id) as
-      { starts_at: number; expires_at: number; revoked_at: number | null; status: string }[];
+    const mine = db.prepare('SELECT starts_at,expires_at,revoked_at,status,ended_at FROM leases WHERE user_id=?').all(u.id) as
+      { starts_at: number; expires_at: number; revoked_at: number | null; status: string; ended_at: number | null }[];
     const rej = checkLeaseRequest({
       lab, minutes, hasActive: mine.some((l) => l.status === 'ACTIVE'), usedMinutes: usedMinutesToday(mine, now),
       quotaHours: config.dailyQuotaHours, testMode: config.testMode, nowMs: now,
     });
     if (rej) throw reject(rej);
+    // a released/expired lease keeps its tunnel IP until the worker closes it; rapid cycling would drain the pool
+    if (mine.some((l) => l.ended_at === null)) throw new HttpError(409, 'PREV_CLOSING', 'Lease sebelumnya masih ditutup, coba lagi beberapa detik lagi');
 
     const kp = generateKeyPair();
     const p = { userId: u.id, labId, minutes, clientPubkey: kp.publicKey, requesterIp: clientIp(req, config.trustedProxyIp), actor: u.email, nowMs: now };

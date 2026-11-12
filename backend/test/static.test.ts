@@ -33,6 +33,10 @@ test('staticDir: SPA fallback for page paths, JSON 404 for unknown /api and /aut
     }
     // API routes still win over the static wildcard
     assert.equal((await app.inject({ method: 'GET', url: '/api/me' })).statusCode, 401);
+    for (const url of ['/', '/assets/app.js', '/api/tidak-ada', '/api/me']) {
+      const h = (await app.inject({ method: 'GET', url })).headers;
+      assert.deepEqual([h['x-frame-options'], h['content-security-policy'], h['referrer-policy']], ['DENY', "frame-ancestors 'none'", 'no-referrer'], url);
+    }
   } finally {
     await app.close(); db.close(); rmSync(dir, { recursive: true, force: true });
   }
