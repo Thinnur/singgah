@@ -1,6 +1,7 @@
 [Unit]
 Description=Singgah API (portal VPN lab)
-After=network-online.target
+After=network-online.target s5-labs.service
+Wants=network-online.target
 
 [Service]
 User=singgah

@@ -6,28 +6,28 @@
 set -euo pipefail
 LABS="cloud:192.168.10 cyber:192.168.20 jarkom:192.168.30"   # id lab : 3 oktet pertama subnet /24
 
+docker_rules() {   # docker_rules -D|-I
+	if [ "$1" = -D ]; then
+		while iptables -D DOCKER-USER -i wg0 -o s5-+ -j ACCEPT 2>/dev/null; do :; done
+		while iptables -D DOCKER-USER -i s5-+ -o wg0 -j ACCEPT 2>/dev/null; do :; done
+	else
+		iptables -I DOCKER-USER -i wg0 -o s5-+ -j ACCEPT
+		iptables -I DOCKER-USER -i s5-+ -o wg0 -j ACCEPT
+	fi
+}
+
 down() {
 	for l in $LABS; do ip netns del "lab-${l%%:*}" 2>/dev/null || true; done   # veth ikut terhapus
 	nft delete table ip s5gw 2>/dev/null || true
-	while iptables -D DOCKER-USER -i wg0 -o s5-+ -j ACCEPT 2>/dev/null; do :; done
-	while iptables -D DOCKER-USER -i s5-+ -o wg0 -j ACCEPT 2>/dev/null; do :; done
+	docker_rules -D
 }
 
 up() {
-	down
-	local id net
-	for l in $LABS; do
-		id=${l%%:*} net=${l#*:}
-		ip netns add "lab-$id"
-		ip link add "s5-$id" type veth peer name eth0 netns "lab-$id"
-		ip addr add "$net.1/24" dev "s5-$id"
-		ip link set "s5-$id" up
-		ip -n "lab-$id" addr add "$net.10/24" dev eth0   # "VM target" lab
-		ip -n "lab-$id" link set lo up
-		ip -n "lab-$id" link set eth0 up
-		ip -n "lab-$id" route add 10.8.0.0/24 via "$net.1"
-	done
+	# 1. Firewall dulu, satu transaksi atomik (buat-hapus-buat): wg0 tidak pernah tanpa filter,
+	#    juga bila langkah netns di bawah gagal. Set dan aturan lab milik worker ikut terhapus.
 	nft -f - <<-EOF
+	table ip s5gw
+	delete table ip s5gw
 	table ip s5gw {
 		chain forward {
 			type filter hook forward priority filter - 10; policy accept;
@@ -47,9 +47,25 @@ up() {
 		}
 	}
 	EOF
-	# Docker men-DROP forwarding bawaan; kebijakan sebenarnya ditegakkan tabel s5gw di atas.
-	iptables -I DOCKER-USER -i wg0 -o s5-+ -j ACCEPT
-	iptables -I DOCKER-USER -i s5-+ -o wg0 -j ACCEPT
+	# 2. Docker men-DROP forwarding bawaan; kebijakan sebenarnya ditegakkan tabel s5gw di atas.
+	docker_rules -D
+	docker_rules -I
+	# 3. Netns lab, dibuat ulang per lab. Veth dihapus dulu (sinkron, dua ujung): bisa tertinggal bila ada proses
+	#    di netns lama, lalu "ip link add" gagal "File exists".
+	local id net
+	for l in $LABS; do
+		id=${l%%:*} net=${l#*:}
+		ip link del "s5-$id" 2>/dev/null || true
+		ip netns del "lab-$id" 2>/dev/null || true
+		ip netns add "lab-$id"
+		ip link add "s5-$id" type veth peer name eth0 netns "lab-$id"
+		ip addr add "$net.1/24" dev "s5-$id"
+		ip link set "s5-$id" up
+		ip -n "lab-$id" addr add "$net.10/24" dev eth0   # "VM target" lab
+		ip -n "lab-$id" link set lo up
+		ip -n "lab-$id" link set eth0 up
+		ip -n "lab-$id" route add 10.8.0.0/24 via "$net.1"
+	done
 }
 
 case "${1:-}" in

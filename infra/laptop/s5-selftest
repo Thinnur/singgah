@@ -2,13 +2,15 @@
 # Singgah: uji gateway dengan peer WireGuard sungguhan (lewat relay VPS). Jalankan sebagai root di laptop gateway.
 #   sudo s5-selftest         cek segmentasi; peer uji = lease di database (CLI lease), dipasang oleh singgah-worker
 #   sudo s5-selftest --api   alur portal ujung ke ujung lewat API 127.0.0.1:8780 (butuh TEST_MODE=1)
+# Identitas uji --api memakai domain .invalid (tidak mungkin lolos verifikasi Google): ADMIN_EMAIL wajib ada di
+# ADMIN_EMAILS dan EXTRA_ALLOWED_EMAILS, USER_EMAIL di EXTRA_ALLOWED_EMAILS (/etc/singgah/singgah.env).
 # Socket WireGuard peer uji lahir di netns utama -> paket keluar lewat internet rumah seperti klien luar.
 # ENDPOINT=192.168.1.29:51820 untuk uji tanpa relay. Private key peer uji hanya ada di memori, tidak pernah ke disk.
 set -uo pipefail
 ENDPOINT=${ENDPOINT:-103.93.133.235:51820}
 API=http://127.0.0.1:8780
-USER_EMAIL=selftest-api@mail.ugm.ac.id
-ADMIN_EMAIL=admin@mail.ugm.ac.id
+USER_EMAIL=${USER_EMAIL:-selftest-api@singgah.invalid}
+ADMIN_EMAIL=${ADMIN_EMAIL:-selftest-admin@singgah.invalid}
 declare -A OPEN         # lease uji yang mungkin masih aktif (id -> 1); dicabut saat skrip keluar
 ORPHAN='' TMP='' fail=0 took=0 bytes=''
 
@@ -147,7 +149,16 @@ audit() {   # audit <lease id> <ip> <aksi> [byte]: entri ada; dengan "byte" juga
 restored() { haspeer "$PUB" && inset cyber "$IP"; }
 expired()  { gone "$PUB" cyber "$IP" && audit "$LID" "$IP" EXPIRED byte; }
 
+listed() {   # listed <VAR di singgah.env> <email>: email ada di daftar dipisah koma
+	local v; v=$(. /etc/singgah/singgah.env; printf '%s' "${!1:-}")
+	[[ ",${v// /}," == *",$2,"* ]]
+}
+
 mode_api() {
+	listed ADMIN_EMAILS "$ADMIN_EMAIL" && listed EXTRA_ALLOWED_EMAILS "$ADMIN_EMAIL" ||
+		die "$ADMIN_EMAIL harus ada di ADMIN_EMAILS dan EXTRA_ALLOWED_EMAILS (/etc/singgah/singgah.env), lalu restart singgah-api"
+	listed EXTRA_ALLOWED_EMAILS "$USER_EMAIL" ||
+		die "$USER_EMAIL harus ada di EXTRA_ALLOWED_EMAILS (/etc/singgah/singgah.env), lalu restart singgah-api"
 	TMP=$(mktemp -d) JAR=$TMP/user ADM=$TMP/admin
 	req "$JAR" POST /auth/test-login "{\"email\":\"$USER_EMAIL\"}"
 	[ "$code" = 404 ] && die "mode --api butuh TEST_MODE=1 di /etc/singgah/singgah.env (test-login 404)"

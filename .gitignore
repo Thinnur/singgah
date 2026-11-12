@@ -5,3 +5,4 @@ dist/
 *.conf
 !infra/**/*.example
 !infra/laptop/90-s5-gateway.conf
+!infra/laptop/90-singgah-nosuspend.conf
