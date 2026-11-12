@@ -129,3 +129,28 @@ test('clientIp', () => {
   assert.equal(clientIp(req('100.68.122.86'), '100.68.122.86'), '1.2.3.4');
   assert.equal(clientIp(req('9.9.9.9'), '100.68.122.86'), '9.9.9.9');
 });
+
+test('CSRF gate tidak bisa dilewati via path percent-encoded', async () => {
+  const t = setup();
+  const l = await t.app.inject({ method: 'POST', url: '/auth/test-login', payload: { email: 'a@ugm.ac.id' } });
+  const sid = cookieOf(l, 'singgah_sid')!.value;
+  for (const url of ['/auth/%6Cogout', '/%61uth/logout']) {
+    const r = await t.app.inject({ method: 'POST', url, headers: { 'content-type': 'text/plain' }, payload: 'x', cookies: { singgah_sid: sid } });
+    assert.equal(r.statusCode, 415);
+  }
+  assert.equal((await t.app.inject({ url: '/api/me', cookies: { singgah_sid: sid } })).statusCode, 200);
+  await t.done();
+});
+
+test('rute tidak dikenal -> ApiError 404; logout body kosong ok', async () => {
+  const t = setup();
+  const r = await t.app.inject({ url: '/api/nope' });
+  assert.equal(r.statusCode, 404);
+  assert.deepEqual(r.json(), { code: 'NOT_FOUND', message: 'Tidak ditemukan' });
+  const l = await t.app.inject({ method: 'POST', url: '/auth/test-login', payload: { email: 'a@ugm.ac.id' } });
+  const sid = cookieOf(l, 'singgah_sid')!.value;
+  const out = await t.app.inject({ method: 'POST', url: '/auth/logout', headers: { 'content-type': 'application/json' }, cookies: { singgah_sid: sid } });
+  assert.equal(out.statusCode, 200);
+  assert.equal((await t.app.inject({ url: '/api/me', cookies: { singgah_sid: sid } })).statusCode, 401);
+  await t.done();
+});

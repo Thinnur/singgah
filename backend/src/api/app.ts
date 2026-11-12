@@ -12,9 +12,17 @@ export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof
   app.register(cookie);
   app.decorate('ctx', { db: o.db, config: o.config, fetchFn: o.fetchFn ?? fetch, now: o.now ?? Date.now });
 
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    try { done(null, body === '' ? {} : JSON.parse(body as string)); } catch { done(new HttpError(400, 'BAD_REQUEST', 'JSON tidak valid')); }
+  });
+
+  app.setNotFoundHandler((_req, reply) =>
+    reply.status(404).send({ code: 'NOT_FOUND', message: 'Tidak ditemukan' } satisfies ApiError));
+
   app.addHook('onRequest', async (req) => {
-    const p = req.url.split('?')[0];
-    if ((req.method === 'POST' || req.method === 'PATCH') && (p.startsWith('/api/') || p === '/auth/logout') &&
+    // Every POST/PATCH must be JSON; do not match on req.url (percent-encoded paths bypass it).
+    if ((req.method === 'POST' || req.method === 'PATCH') &&
         !String(req.headers['content-type'] ?? '').toLowerCase().startsWith('application/json')) {
       throw new HttpError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Content-Type harus application/json');
     }
