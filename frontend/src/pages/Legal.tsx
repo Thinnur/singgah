@@ -3,12 +3,12 @@ import { Link } from 'react-router';
 import { Mark } from '../Layout.tsx';
 
 // Public pages (no session needed): guide, plus the privacy/terms links on the Google consent screen.
-function Doc({ title, children }: { title: string; children: ReactNode }) {
+function Doc({ title, dated = true, children }: { title: string; dated?: boolean; children: ReactNode }) {
   return (
     <main className="mx-auto max-w-2xl px-4 py-10">
       <Link to="/login" className="inline-flex items-center gap-2 font-bold"><Mark className="size-8" /> Singgah</Link>
       <h1 className="mt-8 text-3xl font-extrabold tracking-tight">{title}</h1>
-      <p className="mt-2 text-sm text-muted">Berlaku sejak 13 November 2026</p>
+      {dated && <p className="mt-2 text-sm text-muted">Berlaku sejak 13 November 2026</p>}
       <div className="mt-6 space-y-4 text-[15px] leading-relaxed [&_h2]:mt-8 [&_h2]:text-lg [&_h2]:font-bold [&_ul]:list-disc [&_ul]:space-y-1 [&_ul]:pl-5">
         {children}
       </div>
@@ -27,7 +27,7 @@ const LABS = [
 
 export function Guide() {
   return (
-    <Doc title="Cara Pakai Singgah">
+    <Doc title="Cara Pakai Singgah" dated={false}>
       <p>Singgah memberimu akses VPN sementara ke <b>satu</b> lab TRI. Aksesnya berakhir otomatis setelah waktunya habis. Kamu cukup punya akun Google UGM dan aplikasi WireGuard.</p>
 
       <h2>1. Pasang aplikasi WireGuard</h2>
