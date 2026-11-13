@@ -42,6 +42,7 @@ export default function Layout() {
           {me && (
             <div className="ml-auto flex min-w-0 items-center gap-3">
               <span className="hidden truncate text-sm text-muted sm:block" title={me.email}>{me.email}</span>
+              <a href="/panduan" className="btn btn-ghost min-h-9 px-3">Panduan</a>
               <button type="button" onClick={logout} className="btn btn-ghost min-h-9 px-3">Keluar</button>
             </div>
           )}

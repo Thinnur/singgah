@@ -37,7 +37,7 @@ export default function Login() {
         </a>
         <p className="mt-4 text-center text-xs text-muted">Khusus akun @mail.ugm.ac.id dan @ugm.ac.id.</p>
         <p className="mt-6 text-center text-xs text-muted">
-          <a href="/privasi" className="underline">Kebijakan privasi</a> · <a href="/ketentuan" className="underline">Ketentuan layanan</a>
+          <a href="/panduan" className="underline">Cara pakai</a> · <a href="/privasi" className="underline">Kebijakan privasi</a> · <a href="/ketentuan" className="underline">Ketentuan layanan</a>
         </p>
       </div>
     </main>

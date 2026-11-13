@@ -4,7 +4,7 @@ import { Navigate, Outlet, RouterProvider, createBrowserRouter, useOutletContext
 import './index.css';
 import Layout, { type Ctx } from './Layout.tsx';
 import Login from './pages/Login.tsx';
-import { Privacy, Terms } from './pages/Legal.tsx';
+import { Guide, Privacy, Terms } from './pages/Legal.tsx';
 import Home from './pages/Home.tsx';
 import Result from './pages/Result.tsx';
 import AdminLeases from './pages/AdminLeases.tsx';
@@ -20,6 +20,7 @@ function AdminOnly() {
 
 const router = createBrowserRouter([
   { path: '/login', element: <Login /> },
+  { path: '/panduan', element: <Guide /> },
   { path: '/privasi', element: <Privacy /> },
   { path: '/ketentuan', element: <Terms /> },
   {
