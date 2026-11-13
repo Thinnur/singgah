@@ -1,0 +1,21 @@
+[Unit]
+Description=project-s5 halaman uji di VM target lab-%i
+After=s5-labs.service
+# s5-labs membuat ulang netns lab; ikut restart supaya tidak tertinggal di netns lama
+PartOf=s5-labs.service
+
+[Service]
+DynamicUser=yes
+NetworkNamespacePath=/run/netns/lab-%i
+ExecStart=/usr/bin/python3 /opt/singgah/infra/laptop/s5-lab-web.py %i
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=s5-labs.service

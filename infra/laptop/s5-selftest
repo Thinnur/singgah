@@ -75,6 +75,7 @@ check() {   # check <harap: ok|blok> <keterangan> <perintah...>
 }
 pingn() { ip netns exec "s5t$1" ping -c 2 -W 2 "$2"; }                    # pingn <n> <ip>
 tcpn()  { ip netns exec "s5t$1" timeout 3 bash -c "</dev/tcp/$2/$3"; }   # tcpn <n> <ip> <port>
+webn()  { ip netns exec "s5t$1" curl -fsS -m 4 "http://$2/" | grep -F -- "$3" >/dev/null; }   # webn <n> <ip> <teks>: halaman uji lab memuat teks
 
 # ---- mode bawaan: lease lewat CLI (tidak butuh TEST_MODE) ----
 mode_db() {
@@ -96,12 +97,16 @@ mode_db() {
 	check ok   "peer 1 -> gateway 10.8.0.1 (ping)"                 pingn 1 10.8.0.1
 	check ok   "peer 1 -> lab yang diminta (cyber .20.10)"         pingn 1 192.168.20.10
 	check ok   "paket penuh MTU 1200 ke lab (DF)"                  ip netns exec s5t1 ping -c 2 -W 2 -M do -s 1172 192.168.20.10
+	check ok   "peer 1 -> halaman web lab cyber (HTTP)"            webn 1 192.168.20.10 "Lab Cyber Security"
+	check ok   "halaman lab melihat IP tunnel peer 1 (${IP[1]})"   webn 1 192.168.20.10 "${IP[1]}"
+	check blok "peer 1 -> halaman web lab cloud (HTTP)"            webn 1 192.168.10.10 "Lab Cloud Computing"
 	check blok "peer 1 -> lab lain (cloud .10.10)"                 pingn 1 192.168.10.10
 	check blok "peer 1 -> lab lain (jarkom .30.10)"                pingn 1 192.168.30.10
 	check blok "peer 1 -> peer lain ${IP[2]}"                      pingn 1 "${IP[2]}"
 	check blok "peer 1 -> SSH laptop 10.8.0.1:22"                  tcpn 1 10.8.0.1 22
 	check blok "peer 1 -> LAN rumah 192.168.1.1"                   pingn 1 192.168.1.1
 	check ok   "peer 2 -> lab miliknya (cloud .10.10)"             pingn 2 192.168.10.10
+	check ok   "peer 2 -> halaman web lab cloud (HTTP)"            webn 2 192.168.10.10 "Lab Cloud Computing"
 	check blok "peer 2 (lease lab-cloud) -> lab cyber diblokir"    pingn 2 192.168.20.10
 
 	lease revoke --id "${LID[1]}" --reason selftest >/dev/null || bad "revoke lease ${LID[1]} gagal"

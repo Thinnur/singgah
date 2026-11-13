@@ -52,14 +52,15 @@ export function Guide() {
       <p><b>Konfigurasi hanya ditampilkan sekali.</b> Kalau hilang sebelum dipasang, lepas lease lalu ajukan lagi. Jangan bagikan konfigurasimu ke orang lain.</p>
 
       <h2>5. Aktifkan dan pakai</h2>
-      <p>Nyalakan tunnel di aplikasi WireGuard. Tunggu sampai dashboard Singgah menunjukkan <b>Siap dipakai</b> (biasanya beberapa detik). Setelah itu kamu bisa menjangkau perangkat di subnet lab, misalnya <code>ping 192.168.20.10</code> untuk Lab Cyber Security, atau layanan yang diberikan asisten lab.</p>
+      <p>Nyalakan tunnel di aplikasi WireGuard. Tunggu sampai dashboard Singgah menunjukkan <b>Siap dipakai</b> (biasanya beberapa detik). Setelah itu kamu bisa menjangkau perangkat di subnet lab.</p>
+      <p><b>Cara paling mudah mengecek:</b> buka alamat VM target lab-mu di browser, misalnya <code>http://192.168.20.10</code> untuk Lab Cyber Security. Halaman uji lab akan menampilkan tanda "Terhubung lewat Singgah", nama lab, dan IP tunnel-mu (<code>10.8.0.x</code>). Bisa juga dengan <code>ping 192.168.20.10</code>, atau dengan layanan yang diberikan asisten lab.</p>
       <p>Hanya lalu lintas ke lab itu yang lewat VPN, jadi internetmu tetap seperti biasa. Lab lain dan perangkat pengguna lain memang tidak bisa dijangkau.</p>
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead><tr className="border-b border-line text-muted"><th className="py-2 pr-4 font-semibold">Lab</th><th className="py-2 pr-4 font-semibold">Subnet</th><th className="py-2 font-semibold">VM target</th></tr></thead>
           <tbody>
             {LABS.map(([name, net, ip]) => (
-              <tr key={net} className="border-b border-line"><td className="py-2 pr-4">{name}</td><td className="py-2 pr-4"><code>{net}</code></td><td className="py-2"><code>{ip}</code></td></tr>
+              <tr key={net} className="border-b border-line"><td className="py-2 pr-4">{name}</td><td className="py-2 pr-4"><code>{net}</code></td><td className="py-2"><a href={`http://${ip}`} className="underline"><code>{ip}</code></a></td></tr>
             ))}
           </tbody>
         </table>
@@ -72,6 +73,7 @@ export function Guide() {
       <h2>Kalau ada masalah</h2>
       <ul>
         <li><b>Lama di "Menunggu gateway…":</b> tunggu beberapa detik. Kalau tetap begitu, muat ulang halaman.</li>
+        <li><b>Halaman lab lain tidak terbuka:</b> itu memang disengaja. Akses hanya berlaku untuk lab yang kamu pilih.</li>
         <li><b>Tunnel menyala tapi lab tidak bisa dijangkau:</b> lihat "Latest handshake" di aplikasi WireGuard. Kalau tidak pernah muncul, jaringanmu mungkin memblokir UDP port 51820. Coba data seluler atau jaringan lain.</li>
         <li><b>"Kuota harian habis":</b> tunggu sampai pukul 00.00 WIB.</li>
         <li><b>"Lease sebelumnya masih ditutup":</b> tunggu beberapa detik setelah melepas lease, lalu ajukan lagi.</li>
