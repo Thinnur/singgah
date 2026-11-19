@@ -3,8 +3,23 @@
 # Tabel nftables sendiri (ip s5gw); JANGAN "nft flush ruleset" (milik docker/k3s/tailscale).
 # Skrip ini hanya memasang kerangka s5gw. Set lab_<id> dan aturan accept per lab (comment "singgah:<lab-id>")
 # milik singgah-worker: hilang saat skrip ini dijalankan ulang, lalu dipasang lagi pada siklus worker berikutnya.
+# "VM target" .10 tiap lab = container s5-lab-<id> (image singgah-lab-ssh, akun SSH dari berkas yang ditulis worker);
+# netns lab-<id> adalah netns container itu (ip netns attach).
+# shortcut: container --restart no; bila mati, SSH lab itu mati sampai "systemctl restart s5-labs".
 set -euo pipefail
 LABS="cloud:192.168.10 cyber:192.168.20 jarkom:192.168.30"   # id lab : 3 oktet pertama subnet /24
+IMAGE=${S5_LAB_IMAGE:-singgah-lab-ssh}
+ACC_ROOT=/var/lib/singgah/labs     # berkas akun per lab, ditulis singgah-worker (user singgah)
+DATA_ROOT=/var/lib/singgah-labs    # home dan host key sshd per lab, tetap saat container dibuat ulang
+
+container_run() {   # container_run <nama> <hostname> <dir akun> <dir home> <dir hostkeys>: satu-satunya tempat flag container lab
+	local caps=() c
+	for c in CHOWN DAC_OVERRIDE FOWNER SETUID SETGID SYS_CHROOT KILL AUDIT_WRITE NET_BIND_SERVICE; do caps+=(--cap-add "$c"); done
+	docker run -d --init --restart no --network none --name "$1" --hostname "$2" \
+		--pids-limit 256 --memory 512m --cpus 1 --cap-drop ALL "${caps[@]}" \
+		--security-opt no-new-privileges --sysctl net.ipv4.ping_group_range="0 2147483647" \
+		-v "$3:/run/singgah:ro" -v "$4:/home" -v "$5:/etc/ssh/hostkeys" "$IMAGE"
+}
 
 docker_rules() {   # docker_rules -D|-I
 	if [ "$1" = -D ]; then
@@ -17,7 +32,12 @@ docker_rules() {   # docker_rules -D|-I
 }
 
 down() {
-	for l in $LABS; do ip netns del "lab-${l%%:*}" 2>/dev/null || true; done   # veth ikut terhapus
+	local id
+	for l in $LABS; do
+		id=${l%%:*}
+		ip netns del "lab-$id" 2>/dev/null || true
+		docker rm -f "s5-lab-$id" >/dev/null 2>&1 || true   # netns container hilang, veth ikut terhapus
+	done
 	nft delete table ip s5gw 2>/dev/null || true
 	docker_rules -D
 }
@@ -50,14 +70,20 @@ up() {
 	# 2. Docker men-DROP forwarding bawaan; kebijakan sebenarnya ditegakkan tabel s5gw di atas.
 	docker_rules -D
 	docker_rules -I
-	# 3. Netns lab, dibuat ulang per lab. Veth dihapus dulu (sinkron, dua ujung): bisa tertinggal bila ada proses
-	#    di netns lama, lalu "ip link add" gagal "File exists".
+	# 3. Container + netns lab, dibuat ulang per lab. Veth dihapus dulu (sinkron, dua ujung): bisa tertinggal bila ada
+	#    proses di netns lama, lalu "ip link add" gagal "File exists".
 	local id net
+	install -d -o singgah -g singgah -m 0755 "$ACC_ROOT"   # worker juga membuat dir lab yang ditambah admin
 	for l in $LABS; do
 		id=${l%%:*} net=${l#*:}
+		install -d -o singgah -g singgah -m 0755 "$ACC_ROOT/lab-$id"
+		install -d -m 0755 "$DATA_ROOT/lab-$id/home"
+		install -d -m 0700 "$DATA_ROOT/lab-$id/hostkeys"
 		ip link del "s5-$id" 2>/dev/null || true
 		ip netns del "lab-$id" 2>/dev/null || true
-		ip netns add "lab-$id"
+		docker rm -f "s5-lab-$id" >/dev/null 2>&1 || true
+		container_run "s5-lab-$id" "lab-$id" "$ACC_ROOT/lab-$id" "$DATA_ROOT/lab-$id/home" "$DATA_ROOT/lab-$id/hostkeys" >/dev/null
+		ip netns attach "lab-$id" "$(docker inspect -f '{{.State.Pid}}' "s5-lab-$id")"
 		ip link add "s5-$id" type veth peer name eth0 netns "lab-$id"
 		ip addr add "$net.1/24" dev "s5-$id"
 		ip link set "s5-$id" up
@@ -71,5 +97,6 @@ up() {
 case "${1:-}" in
 	up) up ;;
 	down) down ;;
+	container-run) shift; container_run "$@" ;;   # dipakai lab-ssh/test-image.sh
 	*) echo "pakai: $0 up|down" >&2; exit 2 ;;
 esac
