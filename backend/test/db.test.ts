@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { openDb, assertSchema, SCHEMA_VERSION } from '../src/db.ts';
+import { DatabaseSync } from 'node:sqlite';
+import { openDb, assertSchema, SCHEMA_VERSION, SCHEMA_V1 } from '../src/db.ts';
 
 function tmpDb() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'singgah-'));
@@ -74,6 +75,46 @@ test('migrate is idempotent; migrate:false + assertSchema', () => {
   const fresh = tmpDb();
   const e = openDb(fresh.file, { migrate: false });
   assert.throws(() => assertSchema(e), /schema/i);
-  assert.equal(SCHEMA_VERSION, 1);
+  assert.equal(SCHEMA_VERSION, 2);
   e.close(); t.cleanup(); fresh.cleanup();
+});
+
+test('v2: one PENDING/APPROVED ssh account per (user, lab); reopen after REJECTED', () => {
+  const { t, db } = setup();
+  const ins = (st: string, lab = 'lab-cyber') =>
+    db.prepare('INSERT INTO ssh_accounts(user_id,lab_id,status,requested_at) VALUES(1,?,?,0)').run(lab, st);
+  ins('PENDING');
+  assert.throws(() => ins('APPROVED'), /UNIQUE/);
+  ins('PENDING', 'lab-cloud');
+  db.exec(`UPDATE ssh_accounts SET status='REJECTED' WHERE lab_id='lab-cyber'`);
+  ins('PENDING');
+  assert.throws(() => ins('BOGUS', 'lab-jarkom'), /CHECK/);
+  db.close(); t.cleanup();
+});
+
+test('v2: users.ssh_username unique when set', () => {
+  const { t, db } = setup();
+  db.exec(`UPDATE users SET ssh_username='budi' WHERE id=1`);
+  assert.throws(() => db.exec(`UPDATE users SET ssh_username='budi' WHERE id=2`), /UNIQUE/);
+  db.close(); t.cleanup();
+});
+
+test('ssh_audit is append-only', () => {
+  const { t, db } = setup();
+  db.exec(`INSERT INTO ssh_audit(account_id,action,actor,at,detail) VALUES (1,'REQUESTED','a',1,'{}')`);
+  assert.throws(() => db.exec(`UPDATE ssh_audit SET actor='x'`), /append-only/);
+  assert.throws(() => db.exec(`DELETE FROM ssh_audit`), /append-only/);
+  db.close(); t.cleanup();
+});
+
+test('migrates a v1 database to v2 keeping rows', () => {
+  const t = tmpDb();
+  const v1 = new DatabaseSync(t.file);
+  v1.exec(SCHEMA_V1); v1.exec('PRAGMA user_version = 1');
+  v1.exec(`INSERT INTO users(email,role,created_at) VALUES ('a@ugm.ac.id','student',0)`); v1.close();
+  const db = openDb(t.file);
+  assert.equal(db.prepare('PRAGMA user_version').get()!.user_version, 2);
+  assert.equal(db.prepare('SELECT count(*) c FROM users').get()!.c, 1);
+  assert.equal(db.prepare('SELECT count(*) c FROM ssh_accounts').get()!.c, 0);
+  db.close(); t.cleanup();
 });

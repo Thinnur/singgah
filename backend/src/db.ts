@@ -1,8 +1,8 @@
 import { DatabaseSync } from 'node:sqlite';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
-const SCHEMA_V1 = `
+export const SCHEMA_V1 = `
 CREATE TABLE users(
   id INTEGER PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
@@ -64,17 +64,48 @@ INSERT INTO labs(id,name,target_cidr,max_hours,is_active,created_at) VALUES
   ('lab-jarkom','Lab Jaringan Komputer','192.168.30.0/24',4,1,0);
 `;
 
+// v2: SSH accounts in the lab containers (docs/superpowers/specs/2026-11-19-akun-ssh-lab-design.md)
+const SCHEMA_V2 = `
+ALTER TABLE users ADD COLUMN ssh_username TEXT;
+CREATE UNIQUE INDEX users_ssh_username ON users(ssh_username) WHERE ssh_username IS NOT NULL;
+CREATE TABLE ssh_accounts(
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  lab_id TEXT NOT NULL REFERENCES labs(id),
+  status TEXT NOT NULL CHECK(status IN ('PENDING','APPROVED','REJECTED','REVOKED')),
+  requested_at INTEGER NOT NULL,
+  decided_at INTEGER,
+  decided_by TEXT,
+  reason TEXT,
+  password_hash TEXT,
+  password_set_at INTEGER
+);
+CREATE UNIQUE INDEX ssh_accounts_one_open ON ssh_accounts(user_id, lab_id) WHERE status IN ('PENDING','APPROVED');
+CREATE TABLE ssh_audit(
+  id INTEGER PRIMARY KEY,
+  account_id INTEGER NOT NULL,
+  action TEXT NOT NULL CHECK(action IN ('REQUESTED','APPROVED','REJECTED','REVOKED','PASSWORD_SET')),
+  actor TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  detail TEXT NOT NULL
+);
+CREATE TRIGGER ssh_audit_no_update BEFORE UPDATE ON ssh_audit
+  BEGIN SELECT RAISE(ABORT,'ssh_audit append-only'); END;
+CREATE TRIGGER ssh_audit_no_delete BEFORE DELETE ON ssh_audit
+  BEGIN SELECT RAISE(ABORT,'ssh_audit append-only'); END;
+`;
+
 const version = (db: DatabaseSync) => db.prepare('PRAGMA user_version').get()!.user_version as number;
 
 export function migrate(db: DatabaseSync): void {
   if (version(db) >= SCHEMA_VERSION) return;
-  // BEGIN IMMEDIATE so two racing processes don't both apply v1
+  // BEGIN IMMEDIATE so two racing processes don't both apply a version
   db.exec('BEGIN IMMEDIATE');
   try {
-    if (version(db) < 1) {
-      db.exec(SCHEMA_V1);
-      db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-    }
+    const v = version(db);
+    if (v < 1) db.exec(SCHEMA_V1);
+    if (v < 2) db.exec(SCHEMA_V2);
+    if (v < SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');
