@@ -13,6 +13,7 @@ export type Config = {
   wgServerPubkey: string;
   wgEndpoint: string;
   trustedProxyIp: string;
+  labAccountsDir: string;
 };
 
 type Env = Record<string, string | undefined>;
@@ -48,5 +49,6 @@ export function loadConfig(env: Env): Config {
     wgServerPubkey: env.WG_SERVER_PUBKEY || 'DEgt5zLQb88/fJzae0f/U+kdcPmgWkyzWwwYJ7UtM2Y=',
     wgEndpoint: env.WG_ENDPOINT || '103.93.133.235:51820',
     trustedProxyIp: env.TRUSTED_PROXY_IP || '100.68.122.86',
+    labAccountsDir: env.LAB_ACCOUNTS_DIR || '/var/lib/singgah/labs',
   };
 }

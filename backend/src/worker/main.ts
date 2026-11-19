@@ -1,5 +1,6 @@
 import { loadConfig } from '../config.ts';
 import { assertSchema, openDb } from '../db.ts';
+import { syncAccountFiles } from './accounts.ts';
 import { reconcileOnce } from './reconcile.ts';
 import { realSys } from './sys.ts';
 
@@ -31,6 +32,13 @@ while (!stopping) {
     else if (r.installed || r.removed || r.closed) console.log(line);
   } catch (e) {
     console.error(`siklus gagal setelah ${Math.round(performance.now() - t0)} ms: ${(e as Error).message}`);
+  }
+  try {
+    const a = syncAccountFiles(db, config.labAccountsDir);
+    if (a.written.length) console.log(`akun ssh ditulis: ${a.written.join(', ')}`);
+    if (a.errors.length) console.error(`akun ssh, error ${a.errors.length}: ${a.errors.join(' | ')}`);
+  } catch (e) {
+    console.error(`akun ssh gagal: ${(e as Error).message}`);
   }
   // a signal during a cycle lets it finish; during the sleep it ends the sleep
   if (!stopping) await new Promise<void>((r) => { const t = setTimeout(r, config.reconcileIntervalS * 1000); wake = () => { clearTimeout(t); r(); }; });

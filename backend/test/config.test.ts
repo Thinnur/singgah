@@ -7,6 +7,8 @@ test('TEST_MODE=1 works without GOOGLE_*', () => {
   assert.equal(c.testMode, true);
   assert.equal(c.trustedProxyIp, '100.68.122.86');
   assert.equal(c.port, 8780);
+  assert.equal(c.labAccountsDir, '/var/lib/singgah/labs');
+  assert.equal(loadConfig({ TEST_MODE: '1', LAB_ACCOUNTS_DIR: '/tmp/x' }).labAccountsDir, '/tmp/x');
 });
 
 test('TEST_MODE=0 without GOOGLE_CLIENT_ID throws naming the variable', () => {
