@@ -11,6 +11,7 @@ import AdminLeases from './pages/AdminLeases.tsx';
 import AdminLabs from './pages/AdminLabs.tsx';
 import AdminAudit from './pages/AdminAudit.tsx';
 import AdminStats from './pages/AdminStats.tsx';
+import AdminSsh from './pages/AdminSsh.tsx';
 
 // Cosmetic only: every /api/admin route checks the role on the server.
 function AdminOnly() {
@@ -34,6 +35,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="leases" replace /> },
           { path: 'leases', element: <AdminLeases /> },
+          { path: 'ssh', element: <AdminSsh /> },
           { path: 'labs', element: <AdminLabs /> },
           { path: 'audit', element: <AdminAudit /> },
           { path: 'stats', element: <AdminStats /> },

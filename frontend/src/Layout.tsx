@@ -16,7 +16,7 @@ export function Mark({ className = 'size-8' }: { className?: string }) {
 }
 
 const NAV = [
-  ['/', 'Akses Lab'], ['/admin/leases', 'Lease'], ['/admin/labs', 'Lab'], ['/admin/audit', 'Audit'], ['/admin/stats', 'Statistik'],
+  ['/', 'Akses Lab'], ['/admin/leases', 'Lease'], ['/admin/ssh', 'SSH'], ['/admin/labs', 'Lab'], ['/admin/audit', 'Audit'], ['/admin/stats', 'Statistik'],
 ] as const;
 
 export default function Layout() {

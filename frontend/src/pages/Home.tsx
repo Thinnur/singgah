@@ -3,6 +3,7 @@ import { api, errorText, type LeaseView } from '../api.ts';
 import { Alert } from '../ui.tsx';
 import Dashboard from './Dashboard.tsx';
 import RequestForm from './RequestForm.tsx';
+import SshAccounts from './SshAccounts.tsx';
 
 /** `/`: the active lease's dashboard, or the request form when there is none. */
 export default function Home() {
@@ -45,6 +46,7 @@ export default function Home() {
           <RequestForm />
         </>
       )}
+      {lease !== undefined && <SshAccounts />}
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import type { ApiError } from '../../backend/src/api/types.ts';
 
 export type {
-  AdminLab, AdminLease, ApiError, AuditEntry, IssueResponse, LabOption, LeaseView, Me, Stats,
+  AdminLab, AdminLease, AdminSshAccount, ApiError, AuditEntry, IssueResponse, LabOption, LeaseView, Me, SshAuditEntry, SshLabView,
+  SshPasswordResponse, SshStatus, Stats,
 } from '../../backend/src/api/types.ts';
 
 /** Thrown for every non-2xx response; `message` is the server's Indonesian text, shown as-is. */
