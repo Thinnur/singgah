@@ -20,3 +20,18 @@ export type Stats = {
   wg0: { rxBps: number; txBps: number } | null;
 };
 export type AdminLab = { id: string; name: string; targetCidr: string; maxHours: number; isActive: boolean; createdAt: number };
+export type SshStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'REVOKED';
+export type SshLabView = {
+  labId: string; labName: string; host: string;
+  account: { id: number; status: SshStatus; username: string; reason: string | null;
+             requestedAt: number; decidedAt: number | null; passwordSet: boolean } | null;
+};
+export type SshPasswordResponse = { username: string; host: string; password: string };
+export type AdminSshAccount = {
+  id: number; email: string; username: string; labId: string; labName: string; status: SshStatus;
+  requestedAt: number; decidedAt: number | null; decidedBy: string | null; reason: string | null; passwordSet: boolean;
+};
+export type SshAuditEntry = {
+  id: number; accountId: number; action: 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'REVOKED' | 'PASSWORD_SET';
+  actor: string; at: number; detail: Record<string, unknown>;
+};

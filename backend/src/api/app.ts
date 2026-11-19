@@ -8,6 +8,7 @@ import { HttpError } from './session.ts';
 import { authRoutes } from './auth.ts';
 import { leaseRoutes } from './leases.ts';
 import { adminRoutes } from './admin.ts';
+import { sshRoutes } from './ssh.ts';
 
 // staticDir: built frontend (frontend/dist), served with SPA fallback.
 export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof fetch; now?: () => number; staticDir?: string; sysNetDir?: string }): FastifyInstance {
@@ -53,5 +54,6 @@ export function buildApp(o: { db: DatabaseSync; config: Config; fetchFn?: typeof
   authRoutes(app);
   leaseRoutes(app);
   adminRoutes(app);
+  sshRoutes(app);
   return app;
 }
