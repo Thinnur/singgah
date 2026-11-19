@@ -129,6 +129,9 @@ mode_db() {
 	check ok   "dari container: LAN rumah 192.168.1.1:80 tidak terjangkau"  sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/192.168.1.1/80'"
 	check ok   "dari container: internet 1.1.1.1:443 tidak terjangkau"      sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/1.1.1.1/443'"
 	check ok   "dari container: sudo tidak tersedia"                        sshn 1 192.168.20.10 "$SU" "$PW" "! command -v sudo"
+	check ok   "dari container: SSH laptop 192.168.20.1:22 tidak terjangkau" sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/192.168.20.1/22'"
+	check ok   "dari container: SSH laptop 10.8.0.1:22 tidak terjangkau"     sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/10.8.0.1/22'"
+	check ok   "dari container: k3s laptop 192.168.20.1:6443 tidak terjangkau" sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/192.168.20.1/6443'"
 	check blok "SSH dengan password salah"                                  sshn 1 192.168.20.10 "$SU" salah true
 	check blok "peer 2 (lease lab-cloud) -> SSH lab cyber .20.10:22"        tcpn 2 192.168.20.10 22
 	lease ssh-revoke --id "$OPEN_SSH" --reason selftest >/dev/null || bad "ssh-revoke $OPEN_SSH gagal"

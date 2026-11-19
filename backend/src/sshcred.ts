@@ -4,11 +4,13 @@ import { randomInt } from 'node:crypto';
 export const SSH_USERNAME = /^[a-z][a-z0-9]{0,31}$/;
 export const SHA512_CRYPT = /^\$6\$[./0-9A-Za-z]{1,16}\$[./0-9A-Za-z]{86}$/;
 
-/** System and confusing names a student account must never get (Debian base users + our own). */
+/** Names a student account must never get: Debian base users and groups (groupadd would fail forever) + our own. */
 export const RESERVED_USERNAMES: ReadonlySet<string> = new Set([
   'root', 'daemon', 'bin', 'sys', 'sync', 'games', 'man', 'lp', 'mail', 'news', 'uucp', 'proxy', 'backup', 'list',
   'irc', 'nobody', 'sshd', 'messagebus', 'systemd', 'admin', 'administrator', 'ubuntu', 'debian', 'singgah',
   'operator', 'guest', 'test',
+  'adm', 'tty', 'disk', 'kmem', 'dialout', 'fax', 'voice', 'cdrom', 'floppy', 'tape', 'sudo', 'audio', 'dip', 'src',
+  'shadow', 'utmp', 'video', 'sasl', 'plugdev', 'staff', 'users', 'nogroup', 'input', 'sgx', 'kvm', 'render', 'crontab',
 ]);
 
 /** Local part of the email -> Linux username; isTaken checks names already given to other users. */

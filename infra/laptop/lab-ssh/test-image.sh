@@ -47,6 +47,8 @@ root:0:$H1
 bob;x:10002:
 carol:10003:bukanhash
 dave:10004:
+eve:09000:
+frank:00029:
 "
 # 1. sinkron akun dari berkas
 if waitfor 6 is 10001 inc id -u alice; then ok "1. akun valid alice dibuat (uid 10001)"; else bad "1. alice tidak dibuat dalam 6 dtk"; fi
@@ -55,12 +57,15 @@ if is "700 10001" inc stat -c '%a %u' /home/alice; then ok "1. /home/alice 0700 
 if is "$ROOT_SHADOW" inc bash -c 'getent shadow root | cut -d: -f2'; then ok "1. baris root:0 diabaikan (shadow root tetap)"; else bad "1. shadow root berubah"; fi
 if ! inc id carol >/dev/null 2>&1 && ! inc id bob >/dev/null 2>&1; then ok "1. baris tidak valid (bob;x, hash bukan crypt) diabaikan"; else bad "1. akun dari baris tidak valid dibuat"; fi
 if inc bash -c 'getent shadow dave | cut -d: -f2 | grep -q "^!"'; then ok "1. akun tanpa hash (dave) dikunci"; else bad "1. dave tidak dikunci"; fi
+if ! inc id eve >/dev/null 2>&1 && ! inc id frank >/dev/null 2>&1; then ok "1. uid berawalan nol (09000, 00029) diabaikan"; else bad "1. akun dengan uid berawalan nol dibuat"; fi
 
 # 2. login SSH
 if is "$HOST" sshc alice pw-satu -- hostname; then ok "2. login alice dengan password, hostname $HOST"; else bad "2. login alice gagal"; fi
 if sshc alice salah -- true 2>/dev/null; then bad "2. password salah diterima"; else ok "2. password salah ditolak"; fi
 if sshc root pw-satu -- true 2>/dev/null; then bad "2. login root diterima"; else ok "2. login root ditolak"; fi
 if sshc alice pw-satu -- ping -c 1 -W 2 127.0.0.1 >/dev/null; then ok "2. user bisa ping tanpa NET_RAW"; else bad "2. ping dari akun user gagal"; fi
+if is 64 sshc alice pw-satu -- ulimit -u; then ok "2. batas proses per user 64 (fork bomb tidak menghabiskan container)"; else bad "2. ulimit -u alice bukan 64: $(sshc alice pw-satu -- ulimit -u 2>&1)"; fi
+if is "1 1" inc bash -c 'cat /proc/sys/net/ipv6/conf/all/disable_ipv6 /proc/sys/net/ipv6/conf/default/disable_ipv6 | xargs'; then ok "2. IPv6 mati di container (tidak ada jalur link-local ke laptop)"; else bad "2. IPv6 masih aktif di container"; fi
 
 # 3. tanpa sudo, tanpa port forwarding
 if sshc alice pw-satu -- command -v sudo >/dev/null; then bad "3. sudo tersedia"; else ok "3. sudo tidak tersedia"; fi
@@ -76,6 +81,8 @@ accounts ""
 if waitfor 6 bash -c "! docker exec $NAME id alice"; then ok "4. alice dihapus dari berkas: akun hilang"; else bad "4. alice masih ada setelah 6 dtk"; fi
 if waitfor 6 bash -c "! kill -0 $SPID"; then ok "4. sesi alice yang berjalan diputus"; else bad "4. sesi alice masih hidup"; kill $SPID 2>/dev/null; fi
 if inc test -d /home/alice; then ok "4. /home/alice tetap tersimpan"; else bad "4. /home/alice terhapus"; fi
+docker exec -d -u 10001:10001 "$NAME" sleep 300
+if waitfor 40 bash -c "! docker exec $NAME pgrep -u 10001"; then ok "4. proses yatim uid 10001 (akun sudah dihapus) dimatikan"; else bad "4. proses yatim uid 10001 masih hidup setelah 40 dtk"; fi
 
 # 5. container dibuat ulang -> host key sama, akun dan pemilik home kembali
 accounts "alice:10001:$H1

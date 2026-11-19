@@ -18,6 +18,12 @@ test('sshUsernameFor skips reserved and taken names', () => {
   for (const r of ['root', 'sshd', 'nobody', 'admin', 'ubuntu', 'singgah']) assert.ok(RESERVED_USERNAMES.has(r), r);
 });
 
+test('Debian base group names are reserved (groupadd would fail forever)', () => {
+  for (const g of ['staff', 'users', 'sudo', 'video', 'audio', 'adm', 'shadow', 'disk', 'tty', 'nogroup', 'utmp', 'plugdev']) {
+    assert.equal(sshUsernameFor(`${g}@ugm.ac.id`, none), `${g}2`, g);
+  }
+});
+
 test('every derived username matches SSH_USERNAME', () => {
   for (const e of ['A@x', '9@x', 'x.y-z_w@x', `${'9'.repeat(50)}@x`, '@x']) assert.match(sshUsernameFor(e, none), SSH_USERNAME);
 });
