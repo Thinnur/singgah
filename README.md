@@ -56,6 +56,8 @@ ssh laptop-s5 'sudo bash /opt/singgah/infra/laptop/deploy.sh'
 
 **Cek cepat:** `systemctl is-active singgah-api singgah-worker s5-labs`, `journalctl -u singgah-worker -f`, `sudo nft list table ip s5gw`, `curl -s localhost:8780/api/me` (401 bila belum login).
 
+**Container lab (akun SSH):** target `.10` tiap lab adalah container `s5-lab-<id>` (image `singgah-lab-ssh` dari `infra/laptop/lab-ssh`, dibangun `deploy.sh`), dijalankan `s5-labs` dan disambungkan ke netns `lab-<id>` lewat `ip netns attach`. Container tanpa default route (tidak bisa ke internet/LAN), tanpa sudo, tanpa port forwarding. Akunnya disinkron dari `/var/lib/singgah/labs/<lab>/accounts` (ditulis worker, hanya akun yang disetujui admin). Home tersimpan di `/var/lib/singgah-labs/<lab>/home`, host key sshd di `.../hostkeys` (tetap saat container dibuat ulang). *Shortcut:* container memakai `--restart no`; bila mati (atau daemon Docker restart), SSH lab itu mati sampai `sudo systemctl restart s5-labs`. Restart `s5-labs` (termasuk deploy) memutus semua sesi SSH. Uji image tanpa menyentuh lab produksi: `sudo bash infra/laptop/lab-ssh/test-image.sh infra/laptop/s5-labs infra/laptop/lab-ssh`. Log sinkron akun: `sudo docker logs s5-lab-cyber`.
+
 **CLI lease (uji mandiri) wajib dijalankan sebagai user `singgah`, jangan sebagai root.** Kalau root yang membuka database, file `singgah.db-wal`/`-shm` bisa jadi milik root dan service tidak bisa menulis lagi.
 
 ```

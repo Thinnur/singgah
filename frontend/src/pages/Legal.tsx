@@ -70,6 +70,16 @@ export function Guide() {
       <h2>6. Selesai</h2>
       <p>Tekan <b>Lepas Lease</b> di dashboard bila sudah selesai, supaya sisa waktumu kembali ke kuota. Lalu matikan tunnel di aplikasi WireGuard. Kalau waktunya habis, akses dicabut otomatis, dan konfigurasi lama tidak bisa dipakai lagi.</p>
 
+      <h2>7. SSH ke container lab (opsional)</h2>
+      <p>VM target tiap lab adalah container Linux yang bisa kamu masuki lewat SSH. Akunnya perlu disetujui admin dulu.</p>
+      <ul>
+        <li>Di portal, bagian <b>Akun SSH</b>, tekan <b>Ajukan</b> pada lab yang kamu butuhkan, lalu tunggu admin menyetujui.</li>
+        <li>Setelah disetujui, tekan <b>Buat password</b>. Password hanya ditampilkan sekali. Kalau lupa, buat ulang.</li>
+        <li>Nyalakan tunnel WireGuard untuk lab itu, lalu masuk dengan username yang tertera di portal, misalnya <code>ssh username@cyber.lab</code> (nama sesuai tabel VM target di atas).</li>
+        <li><b>Windows:</b> ketik perintah itu di PowerShell. <b>macOS / Linux:</b> di Terminal. <b>HP:</b> pakai aplikasi SSH seperti Termius.</li>
+      </ul>
+      <p>Isi folder <code>/home/username</code> tetap tersimpan. Container tidak punya akses internet, tidak ada <code>sudo</code>, dan port forwarding dimatikan. Akun bisa dicabut admin kapan saja.</p>
+
       <h2>Kalau ada masalah</h2>
       <ul>
         <li><b>Lama di "Menunggu gateway…":</b> tunggu beberapa detik. Kalau tetap begitu, muat ulang halaman.</li>
@@ -94,10 +104,12 @@ export function Privacy() {
         <li>Kunci publik WireGuard perangkatmu dan jumlah data yang terkirim dan diterima lewat tunnel.</li>
         <li>Alamat IP yang kamu pakai saat mengajukan akses.</li>
         <li>Log audit setiap penerbitan, pencabutan, dan kedaluwarsa akses.</li>
+        <li>Bila kamu mengajukan akun SSH lab: username, status pengajuan, alasan bila ditolak atau dicabut, hash password (bukan password aslinya), log auditnya, dan isi folder <code>/home</code> kamu di container lab.</li>
       </ul>
       <h2>Yang tidak kami simpan</h2>
       <ul>
         <li>Kunci privat WireGuard. Kunci ini dibuat sesaat, hanya diberikan sekali kepadamu, lalu dibuang dari server.</li>
+        <li>Password SSH lab dalam bentuk asli. Password hanya ditampilkan sekali kepadamu; yang disimpan hanya hash-nya.</li>
         <li>Kata sandi Google kamu.</li>
         <li>Isi lalu lintas jaringanmu.</li>
       </ul>

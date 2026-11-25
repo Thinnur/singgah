@@ -1,7 +1,7 @@
 [Unit]
 Description=project-s5 subnet lab simulasi + firewall gateway wg0
 After=docker.service wg-quick@wg0.service
-Wants=wg-quick@wg0.service
+Wants=wg-quick@wg0.service docker.service
 
 [Service]
 Type=oneshot

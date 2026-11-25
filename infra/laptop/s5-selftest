@@ -1,6 +1,7 @@
 #!/bin/bash
 # Singgah: uji gateway dengan peer WireGuard sungguhan (lewat relay VPS). Jalankan sebagai root di laptop gateway.
-#   sudo s5-selftest         cek segmentasi; peer uji = lease di database (CLI lease), dipasang oleh singgah-worker
+#   sudo s5-selftest         cek segmentasi; peer uji = lease di database (CLI lease), dipasang oleh singgah-worker;
+#                            juga login SSH ke container lab cyber dengan akun uji (CLI ssh-grant, butuh sshpass)
 #   sudo s5-selftest --api   alur portal ujung ke ujung lewat API 127.0.0.1:8780 (butuh TEST_MODE=1)
 # Identitas uji --api memakai domain .invalid (tidak mungkin lolos verifikasi Google): ADMIN_EMAIL wajib ada di
 # ADMIN_EMAILS dan EXTRA_ALLOWED_EMAILS, USER_EMAIL di EXTRA_ALLOWED_EMAILS (/etc/singgah/singgah.env).
@@ -12,7 +13,7 @@ API=http://127.0.0.1:8780
 USER_EMAIL=${USER_EMAIL:-selftest-api@singgah.invalid}
 ADMIN_EMAIL=${ADMIN_EMAIL:-selftest-admin@singgah.invalid}
 declare -A OPEN         # lease uji yang mungkin masih aktif (id -> 1); dicabut saat skrip keluar
-ORPHAN='' TMP='' fail=0 took=0 bytes=''
+ORPHAN='' TMP='' OPEN_SSH='' fail=0 took=0 bytes=''
 
 ok()  { echo "PASS  $*"; }
 bad() { echo "FAIL  $*"; fail=1; }
@@ -27,10 +28,13 @@ cleanup() {
 	local id n
 	for id in "${!OPEN[@]}"; do lease revoke --id "$id" --reason selftest >/dev/null 2>&1; done
 	OPEN=()
+	[ -n "$OPEN_SSH" ] && lease ssh-revoke --id "$OPEN_SSH" --reason selftest >/dev/null 2>&1
+	OPEN_SSH=''
 	[ -n "$ORPHAN" ] && wg set wg0 peer "$ORPHAN" remove 2>/dev/null
 	for n in 1 2; do
 		ip netns del "s5t$n" 2>/dev/null
 		ip link del "s5t$n" 2>/dev/null
+		rm -rf "/etc/netns/s5t$n"
 	done
 	[ -n "$TMP" ] && rm -rf "$TMP"
 	return 0
@@ -57,6 +61,8 @@ peer() {   # peer <n> <private key> <ip tunnel>: klien uji di netns s5t<n>, tung
 	local n=$1 priv=$2 ip=$3
 	ip netns del "s5t$n" 2>/dev/null; ip link del "s5t$n" 2>/dev/null
 	ip netns add "s5t$n"
+	# "ip netns exec" memakai berkas ini sebagai /etc/resolv.conf: DNS = 10.8.0.1 seperti config klien
+	install -D -m 644 <(echo "nameserver 10.8.0.1") "/etc/netns/s5t$n/resolv.conf"
 	ip link add "s5t$n" type wireguard
 	wg set "s5t$n" private-key <(echo "$priv") peer "$GW_PUB" endpoint "$ENDPOINT" \
 		allowed-ips 10.8.0.0/24,192.168.0.0/16 persistent-keepalive 1
@@ -76,6 +82,10 @@ check() {   # check <harap: ok|blok> <keterangan> <perintah...>
 pingn() { ip netns exec "s5t$1" ping -c 2 -W 2 "$2"; }                    # pingn <n> <ip>
 tcpn()  { ip netns exec "s5t$1" timeout 3 bash -c "</dev/tcp/$2/$3"; }   # tcpn <n> <ip> <port>
 webn()  { ip netns exec "s5t$1" curl -fsS -m 4 "http://$2/" | grep -F -- "$3" >/dev/null; }   # webn <n> <ip> <teks>: halaman uji lab memuat teks
+sshn()  {   # sshn <n> <ip> <user> <password> <perintah>: login SSH dari peer uji n (password lewat env, bukan argv)
+	ip netns exec "s5t$1" env SSHPASS="$4" sshpass -e ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+		-o ConnectTimeout=4 -o PubkeyAuthentication=no -o PreferredAuthentications=password -o LogLevel=ERROR "$3@$2" "$5"
+}
 dnsn() {   # dnsn <n> <nama> [ip]: Bind9 di 10.8.0.1 menjawab nama itu lewat tunnel (dengan ip itu bila diberikan)
 	local a; a=$(ip netns exec "s5t$1" dig +short +time=2 +tries=1 @10.8.0.1 "$2" A) && [ -n "$a" ] &&
 		{ [ $# -lt 3 ] || grep -xF -- "$3" <<<"$a" >/dev/null; }
@@ -85,7 +95,8 @@ nginxc() { [[ "$(curl -s -o /dev/null -w '%{http_code} %header{server}' -m 4 -H 
 
 # ---- mode bawaan: lease lewat CLI (tidak butuh TEST_MODE) ----
 mode_db() {
-	local n out
+	local n out PW SU
+	command -v sshpass >/dev/null || die "sshpass belum terpasang: jalankan deploy.sh"
 	local -A LAB=([1]=lab-cyber [2]=lab-cloud) PRIV PUB LID IP
 	for n in 1 2; do
 		PRIV[$n]=$(wg genkey); PUB[$n]=$(echo "${PRIV[$n]}" | wg pubkey)
@@ -119,6 +130,30 @@ mode_db() {
 	check ok   "nginx :8080 -> singgah-api (/api/me = 401)"      nginxc 401 http://127.0.0.1:8080/api/me
 	check ok   "nginx :8080 menutup /auth/test-login (404)"      nginxc 404 -X POST -H 'content-type: application/json' \
 		-d "{\"email\":\"$ADMIN_EMAIL\"}" http://127.0.0.1:8080/auth/test-login
+
+	# akun SSH di container lab cyber (disetujui lewat CLI, password uji sekali pakai)
+	PW=$(openssl rand -hex 12)
+	out=$(lease ssh-grant --email selftest1@local --lab lab-cyber --password "$PW") || die "lease ssh-grant gagal"
+	OPEN_SSH=${out%% *} SU=${out#* }
+	sshhost()   { [ "$(sshn 1 192.168.20.10 "$SU" "$PW" hostname 2>/dev/null)" = lab-cyber ]; }
+	sshdenied() { ! sshn 1 192.168.20.10 "$SU" "$PW" true; }
+	if waitfor 10 0.5 sshhost; then ok "SSH peer 1 -> container lab cyber sebagai $SU (${took} dtk)"
+	else bad "SSH peer 1 -> container lab cyber sebagai $SU gagal dalam 10 dtk"; fi
+	sshname()   { [ "$(sshn 1 cyber.lab "$SU" "$PW" hostname 2>/dev/null)" = lab-cyber ]; }
+	check ok   "SSH peer 1 -> nama cyber.lab (DNS gateway)"                 sshname
+	# "ok" = login berhasil DAN target tidak terjangkau; login gagal tetap terhitung FAIL
+	check ok   "dari container: LAN rumah 192.168.1.1:80 tidak terjangkau"  sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/192.168.1.1/80'"
+	check ok   "dari container: internet 1.1.1.1:443 tidak terjangkau"      sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/1.1.1.1/443'"
+	check ok   "dari container: sudo tidak tersedia"                        sshn 1 192.168.20.10 "$SU" "$PW" "! command -v sudo"
+	check ok   "dari container: SSH laptop 192.168.20.1:22 tidak terjangkau" sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/192.168.20.1/22'"
+	check ok   "dari container: SSH laptop 10.8.0.1:22 tidak terjangkau"     sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/10.8.0.1/22'"
+	check ok   "dari container: k3s laptop 192.168.20.1:6443 tidak terjangkau" sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/192.168.20.1/6443'"
+	check blok "SSH dengan password salah"                                  sshn 1 192.168.20.10 "$SU" salah true
+	check blok "peer 2 (lease lab-cloud) -> SSH lab cyber .20.10:22"        tcpn 2 192.168.20.10 22
+	lease ssh-revoke --id "$OPEN_SSH" --reason selftest >/dev/null || bad "ssh-revoke $OPEN_SSH gagal"
+	OPEN_SSH=''
+	if waitfor 10 0.5 sshdenied; then ok "akun SSH dicabut: login ditolak (${took} dtk)"
+	else bad "akun SSH dicabut: login masih bisa setelah 10 dtk"; fi
 
 	lease revoke --id "${LID[1]}" --reason selftest >/dev/null || bad "revoke lease ${LID[1]} gagal"
 	unset "OPEN[${LID[1]}]"
