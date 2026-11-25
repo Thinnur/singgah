@@ -1,0 +1,5 @@
+// Zona nama VM target lab. ".internal" = TLD khusus jaringan privat (ICANN, 2024), tidak bentrok dengan internet.
+zone "lab.internal" {
+	type primary;
+	file "/etc/bind/db.lab.internal";
+};

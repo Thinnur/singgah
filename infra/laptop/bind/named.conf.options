@@ -1,0 +1,16 @@
+// Singgah: Bind9 sebagai DNS klien VPN (DNS = 10.8.0.1 di config klien). Dipasang deploy.sh ke /etc/bind/.
+// Hanya mendengar di wg0 (10.8.0.1); chain input s5gw membuka port 53 dari wg0 saja.
+acl vpn { 10.8.0.0/24; };
+
+options {
+	directory "/var/cache/bind";
+	listen-on { 10.8.0.1; };
+	listen-on-v6 { none; };
+	allow-query { vpn; };
+	// klien memakai DNS ini untuk semua nama selama tunnel aktif, jadi nama internet juga harus dijawab
+	allow-recursion { vpn; };
+	forwarders { 1.1.1.1; 8.8.8.8; };
+	allow-transfer { none; };
+	dnssec-validation auto;
+	version none;
+};

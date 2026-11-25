@@ -1,0 +1,15 @@
+; Zona lab.internal: VM target .10 tiap lab (subnet sama dengan LABS di s5-labs). Naikkan serial tiap kali diubah.
+; shortcut: lab baru tidak otomatis masuk zona ini; tambahkan barisnya di sini lalu deploy.
+$TTL 300
+@       IN SOA  ns.lab.internal. admin.lab.internal. (
+                2026112501 ; serial (YYYYMMDDnn)
+                3600       ; refresh
+                600        ; retry
+                86400      ; expire
+                300 )      ; negative TTL
+        IN NS   ns.lab.internal.
+ns      IN A    10.8.0.1
+gateway IN A    10.8.0.1
+cloud   IN A    192.168.10.10
+cyber   IN A    192.168.20.10
+jarkom  IN A    192.168.30.10

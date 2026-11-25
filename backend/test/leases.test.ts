@@ -123,7 +123,7 @@ test('release: owner only, audit, IP not reused and no new lease until ended', a
 test('requester ip via trusted proxy; labs list', async () => {
   const t = setup();
   const u = t.user('a@ugm.ac.id');
-  const r = await t.issue(u, undefined, { remoteAddress: '100.68.122.86', headers: { 'cf-connecting-ip': '36.1.2.3', 'content-type': 'application/json' } });
+  const r = await t.issue(u, undefined, { remoteAddress: '127.0.0.1', headers: { 'cf-connecting-ip': '36.1.2.3', 'content-type': 'application/json' } });
   assert.equal(r.statusCode, 201);
   const d = JSON.parse((t.db.prepare("SELECT detail FROM audit_log WHERE action='ISSUED'").get() as { detail: string }).detail);
   assert.equal(d.requesterIp, '36.1.2.3');

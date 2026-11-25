@@ -43,6 +43,8 @@ test('test-login guards', async () => {
   const post = (email: string, remoteAddress?: string) =>
     t.app.inject({ method: 'POST', url: '/auth/test-login', payload: { email }, remoteAddress });
   assert.equal((await post('a@ugm.ac.id', '10.0.0.5')).statusCode, 403);
+  const viaCf = await t.app.inject({ method: 'POST', url: '/auth/test-login', payload: { email: 'a@ugm.ac.id' }, headers: { 'cf-connecting-ip': '1.2.3.4' } });
+  assert.equal(viaCf.statusCode, 403);
   const bad = await post('a@gmail.com');
   assert.equal(bad.statusCode, 403);
   assert.equal(bad.json().code, 'EMAIL_NOT_ALLOWED');

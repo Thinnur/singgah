@@ -26,6 +26,6 @@ test('matches wg pubkey', { skip: !hasWg && 'wg tidak terpasang' }, () => {
 test('clientConfig', () => {
   assert.equal(
     clientConfig({ privateKey: 'PRIV', address: '10.8.0.5', serverPubkey: 'SRV', endpoint: '1.2.3.4:51820', labCidr: '192.168.20.0/24' }),
-    '[Interface]\nPrivateKey = PRIV\nAddress = 10.8.0.5/32\nMTU = 1200\n\n[Peer]\nPublicKey = SRV\nEndpoint = 1.2.3.4:51820\nAllowedIPs = 10.8.0.1/32, 192.168.20.0/24\nPersistentKeepalive = 25\n',
+    '[Interface]\nPrivateKey = PRIV\nAddress = 10.8.0.5/32\nMTU = 1200\nDNS = 10.8.0.1\n\n[Peer]\nPublicKey = SRV\nEndpoint = 1.2.3.4:51820\nAllowedIPs = 10.8.0.1/32, 192.168.20.0/24\nPersistentKeepalive = 25\n',
   );
 });
