@@ -16,6 +16,7 @@ export function clientConfig(p: { privateKey: string; address: string; serverPub
     `PrivateKey = ${p.privateKey}`,
     `Address = ${p.address}/32`,
     'MTU = 1200',
+    'DNS = 10.8.0.1',
     '',
     '[Peer]',
     `PublicKey = ${p.serverPubkey}`,

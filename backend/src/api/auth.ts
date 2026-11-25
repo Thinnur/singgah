@@ -63,7 +63,10 @@ export function authRoutes(app: FastifyInstance): void {
 
   app.post<{ Body: { email?: unknown } }>('/auth/test-login', async (req, reply) => {
     if (!config.testMode) throw new HttpError(404, 'NOT_FOUND', 'Tidak ditemukan');
-    if (!LOOPBACK.has(req.socket.remoteAddress ?? '')) throw new HttpError(403, 'FORBIDDEN', 'Hanya dari localhost');
+    // di belakang nginx semua koneksi datang dari 127.0.0.1; header Cloudflare menandai permintaan dari internet
+    if (!LOOPBACK.has(req.socket.remoteAddress ?? '') || req.headers['cf-connecting-ip'] !== undefined) {
+      throw new HttpError(403, 'FORBIDDEN', 'Hanya dari localhost');
+    }
     const email = normalizeEmail(String(req.body?.email ?? ''));
     if (!isEmailAllowed(email, config.extraAllowedEmails)) {
       throw new HttpError(403, 'EMAIL_NOT_ALLOWED', 'Email ini tidak diizinkan. Gunakan akun UGM (@mail.ugm.ac.id atau @ugm.ac.id)');

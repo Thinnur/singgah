@@ -47,6 +47,6 @@ export function loadConfig(env: Env): Config {
     wgInterface: env.WG_INTERFACE || 'wg0',
     wgServerPubkey: env.WG_SERVER_PUBKEY || 'DEgt5zLQb88/fJzae0f/U+kdcPmgWkyzWwwYJ7UtM2Y=',
     wgEndpoint: env.WG_ENDPOINT || '103.93.133.235:51820',
-    trustedProxyIp: env.TRUSTED_PROXY_IP || '100.68.122.86',
+    trustedProxyIp: env.TRUSTED_PROXY_IP || '127.0.0.1',
   };
 }

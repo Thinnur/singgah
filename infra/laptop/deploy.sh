@@ -16,5 +16,14 @@ if [ -d frontend ]; then npm run build -w frontend; fi
 install -m 755 infra/laptop/s5-labs infra/laptop/s5-selftest /usr/local/sbin/
 # lid/suspend diabaikan; berlaku setelah reboot (systemd-logind sengaja tidak di-restart)
 install -D -m 644 infra/laptop/90-singgah-nosuspend.conf /etc/systemd/logind.conf.d/90-singgah-nosuspend.conf
+# DNS klien VPN (Bind9, hanya di 10.8.0.1) dan reverse proxy portal (nginx)
+dpkg -s bind9 bind9-dnsutils nginx >/dev/null 2>&1 || DEBIAN_FRONTEND=noninteractive apt-get install -y -q bind9 bind9-dnsutils nginx
+install -m 644 infra/laptop/bind/named.conf.options infra/laptop/bind/named.conf.local infra/laptop/bind/db.lab.internal /etc/bind/
+named-checkconf -z >/dev/null
+systemctl enable --quiet named
+install -m 644 infra/laptop/nginx-singgah.conf /etc/nginx/sites-available/singgah
+ln -sf /etc/nginx/sites-available/singgah /etc/nginx/sites-enabled/singgah
+nginx -t -q
+systemctl reload nginx
 # s5-labs menghapus set/aturan lab; worker memasangnya lagi pada siklus berikutnya
-for u in s5-labs singgah-worker singgah-api; do systemctl restart $u; done
+for u in s5-labs singgah-worker singgah-api named; do systemctl restart $u; done

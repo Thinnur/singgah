@@ -5,7 +5,7 @@ import { loadConfig } from '../src/config.ts';
 test('TEST_MODE=1 works without GOOGLE_*', () => {
   const c = loadConfig({ TEST_MODE: '1' });
   assert.equal(c.testMode, true);
-  assert.equal(c.trustedProxyIp, '100.68.122.86');
+  assert.equal(c.trustedProxyIp, '127.0.0.1');
   assert.equal(c.port, 8780);
 });
 

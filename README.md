@@ -27,7 +27,9 @@ Laptop gateway sudah menjalankan `wg-quick@wg0` (lihat `infra/laptop/wg0.conf.ex
 - Node `v24.22.1` dari tarball resmi (diverifikasi `SHASUMS256.txt`) di `/opt/node-v24.22.1`.
 - User sistem `singgah`, kode `/opt/singgah` (milik root, di-clone lewat deploy key read-only), database `/var/lib/singgah/singgah.db`, konfigurasi `/etc/singgah/singgah.env` (root:singgah 0640, contoh lengkap di `infra/laptop/singgah.env.example`).
 - Service `singgah-api` (tanpa capability, port 8780) dan `singgah-worker` (`CAP_NET_ADMIN`, menjalankan `wg` dan `nft`).
-- `s5-labs` hanya memasang netns lab dan kerangka table `ip s5gw`. Table dipasang **paling awal** dalam satu transaksi atomik, jadi wg0 tetap terfilter walau langkah netns gagal. Set `lab_<id>` dan aturan accept per lab (`comment "singgah:<lab-id>"`) dibuat worker; selama sinkron nft gagal, worker tidak memasang peer baru. Port 8780 hanya terbuka untuk `lo` dan relay VPS `100.68.122.86`.
+- `s5-labs` hanya memasang netns lab dan kerangka table `ip s5gw`. Table dipasang **paling awal** dalam satu transaksi atomik, jadi wg0 tetap terfilter walau langkah netns gagal. Set `lab_<id>` dan aturan accept per lab (`comment "singgah:<lab-id>"`) dibuat worker; selama sinkron nft gagal, worker tidak memasang peer baru. Port 8780 hanya terbuka untuk `lo` (nginx) dan relay VPS `100.68.122.86` (jalur lama, disisakan untuk rollback rute tunnel). Port 53 di `10.8.0.1` terbuka dari wg0 untuk Bind9.
+- **nginx** (`infra/laptop/nginx-singgah.conf` → `/etc/nginx/sites-available/singgah`): reverse proxy `singgah.akzara.id` di port 80 ke `127.0.0.1:8780`, hanya untuk relay VPS dan localhost. `/auth/test-login` ditutup di nginx (404), dan API juga menolak test-login yang membawa header `CF-Connecting-IP`. `TRUSTED_PROXY_IP=127.0.0.1`.
+- **Bind9** (`infra/laptop/bind/` → `/etc/bind/`): DNS klien VPN di `10.8.0.1` (config klien berisi `DNS = 10.8.0.1`). Zona `lab.internal`: `cloud`, `cyber`, `jarkom` → VM target `.10` tiap lab, `gateway` → `10.8.0.1`. Nama lain dijawab rekursif (forwarder 1.1.1.1, 8.8.8.8) hanya untuk `10.8.0.0/24`. Lab baru perlu ditambah manual ke `db.lab.internal`.
 - Halaman uji per lab: `s5-lab-web@<id>.service` (mis. `s5-lab-web@cyber`) menjalankan `infra/laptop/s5-lab-web.py` di port 80 di dalam netns `lab-<id>`, sebagai user dinamis tanpa root. Halaman di `http://<subnet>.10` (mis. `http://192.168.20.10`) menampilkan nama lab, IP VM target, dan IP tunnel pengunjung. Unit ini `PartOf=s5-labs`, jadi ikut restart setiap netns dibuat ulang. `deploy.sh` meng-enable satu instance untuk tiap lab di `LABS`. Lab baru perlu namanya ditambah di `NAMES` pada skrip, kalau tidak tampil sebagai `lab-<id>`.
 - Drop-in logind `90-singgah-nosuspend.conf` (`/etc/systemd/logind.conf.d/`): menutup lid/tombol suspend tidak menidurkan laptop (PRD 9.1). **Berlaku setelah reboot berikutnya**; `systemd-logind` sengaja tidak di-restart karena bisa mematikan sesi desktop pemilik laptop.
 
@@ -72,8 +74,8 @@ sudo bash -c 'set -a; . /etc/singgah/singgah.env; set +a; exec runuser -u singga
    ```
 2. `PUBLIC_URL=https://singgah.akzara.id` (tanpa garis miring di akhir).
 3. Google Cloud Console: OAuth Client (Web application) dengan redirect URI `https://singgah.akzara.id/auth/callback`; isi `GOOGLE_CLIENT_ID` dan `GOOGLE_CLIENT_SECRET`.
-4. Cloudflare Tunnel (cloudflared di VPS): Public Hostname `singgah.akzara.id` ke `http://100.68.173.108:8780`; aktifkan **Always Use HTTPS** dan **HSTS**.
-5. Selama `TEST_MODE=1`, jangan pernah membuka port 8780 lewat proxy apa pun di laptop: test-login hanya dibatasi ke loopback.
+4. Cloudflare Tunnel (cloudflared di VPS): Public Hostname `singgah.akzara.id` ke `http://100.68.173.108:80` (nginx); aktifkan **Always Use HTTPS** dan **HSTS**.
+5. Selama `TEST_MODE=1`, proxy apa pun di depan port 8780 wajib menutup `/auth/test-login`: koneksi dari proxy lokal terlihat sebagai loopback. nginx bawaan sudah menutupnya; `sudo s5-selftest` memeriksanya.
 6. Setelah demo selesai: `TEST_MODE=0`, lalu `sudo systemctl restart singgah-api singgah-worker`.
 7. Tes reboot sungguhan (sekaligus mengaktifkan drop-in logind), lalu `sudo s5-selftest` (mode database). Jangan pakai `--api` di produksi.
 8. Hapus `/etc/sudoers.d/90-s5-vps` setelah demo.
