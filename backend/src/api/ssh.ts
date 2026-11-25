@@ -1,5 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import { parseCidr } from '../rules.ts';
 import { generatePassword, hashPassword } from '../sshcred.ts';
 import { SshStateError, decideSsh, requestSsh, revokeSsh, setSshPasswordHash, type SshStatus } from '../sshstore.ts';
 import type { AdminSshAccount, SshAuditEntry, SshLabView, SshPasswordResponse } from './types.ts';
@@ -10,11 +9,8 @@ const PASSWORD_GAP_MS = 10_000;
 const bad = (m: string) => new HttpError(400, 'BAD_REQUEST', m);
 const nonBlank = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
 
-/** The lab's container ("VM target") is .10 of its subnet. */
-function labTargetIp(cidr: string): string {
-  const n = parseCidr(cidr).net + 10;
-  return [24, 16, 8, 0].map((s) => (n >>> s) & 255).join('.');
-}
+/** The lab's container ("VM target", .10 of its subnet) by name from Bind9 zone "lab" on the gateway: lab-cyber -> cyber.lab. */
+const labHost = (labId: string): string => `${labId.replace(/^lab-/, '')}.lab`;
 
 const HTTP: Record<SshStateError['code'], [number, string, string]> = {
   ALREADY_OPEN: [409, 'ALREADY_REQUESTED', 'Kamu sudah punya pengajuan atau akun SSH di lab ini'],
@@ -43,7 +39,7 @@ export function sshRoutes(app: FastifyInstance): void {
   function labView(userId: number, lab: { id: string; name: string; target_cidr: string }): SshLabView {
     const a = db.prepare(`${ACCOUNT_SELECT} WHERE a.user_id=? AND a.lab_id=? ORDER BY a.id DESC LIMIT 1`).get(userId, lab.id) as AccountRow | undefined;
     return {
-      labId: lab.id, labName: lab.name, host: labTargetIp(lab.target_cidr),
+      labId: lab.id, labName: lab.name, host: labHost(lab.id),
       account: a ? { id: a.id, status: a.status, username: a.ssh_username, reason: a.reason, requestedAt: a.requested_at,
         decidedAt: a.decided_at, passwordSet: a.pw === 1 } : null,
     };
@@ -68,9 +64,9 @@ export function sshRoutes(app: FastifyInstance): void {
   app.post<{ Params: { id: string } }>('/api/ssh/:id/password', async (req): Promise<SshPasswordResponse> => {
     const u = requireUser(req);
     const a = db.prepare(
-      `SELECT a.id, a.status, a.password_set_at, u.ssh_username, b.target_cidr FROM ssh_accounts a
+      `SELECT a.id, a.status, a.password_set_at, u.ssh_username, a.lab_id FROM ssh_accounts a
        JOIN users u ON u.id=a.user_id JOIN labs b ON b.id=a.lab_id WHERE a.id=? AND a.user_id=?`,
-    ).get(Number(req.params.id), u.id) as { id: number; status: SshStatus; password_set_at: number | null; ssh_username: string; target_cidr: string } | undefined;
+    ).get(Number(req.params.id), u.id) as { id: number; status: SshStatus; password_set_at: number | null; ssh_username: string; lab_id: string } | undefined;
     if (!a) throw new HttpError(404, 'NOT_FOUND', 'Akun SSH tidak ditemukan');
     if (a.status !== 'APPROVED') throw new HttpError(...HTTP.NOT_APPROVED);
     if (a.password_set_at !== null && ctx.now() - a.password_set_at < PASSWORD_GAP_MS) {
@@ -80,7 +76,7 @@ export function sshRoutes(app: FastifyInstance): void {
     const hash = await hashPassword(password);
     // re-checks APPROVED: an admin may have revoked while openssl ran
     mapped(() => setSshPasswordHash(db, { id: a.id, hash, actor: u.email, nowMs: ctx.now() }));
-    return { username: a.ssh_username, host: labTargetIp(a.target_cidr), password };
+    return { username: a.ssh_username, host: labHost(a.lab_id), password };
   });
 
   app.get<{ Querystring: { status?: string } }>('/api/admin/ssh', async (req): Promise<AdminSshAccount[]> => {

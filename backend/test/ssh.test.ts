@@ -51,7 +51,7 @@ test('full flow: request -> approve -> password -> revoke', async () => {
   assert.equal(r.statusCode, 201, r.body);
   const view = r.json() as SshLabView;
   assert.deepEqual({ labId: view.labId, host: view.host, status: view.account?.status, username: view.account?.username },
-    { labId: 'lab-cyber', host: '192.168.20.10', status: 'PENDING', username: 's' });
+    { labId: 'lab-cyber', host: 'cyber.lab', status: 'PENDING', username: 's' });
   const id = view.account!.id;
 
   assert.equal((await t.post(t.admin, `/api/admin/ssh/${id}/approve`)).statusCode, 200);
@@ -66,7 +66,7 @@ test('full flow: request -> approve -> password -> revoke', async () => {
   assert.equal(p.statusCode, 200, p.body);
   const pw = p.json() as SshPasswordResponse;
   assert.equal(pw.username, 's');
-  assert.equal(pw.host, '192.168.20.10');
+  assert.equal(pw.host, 'cyber.lab');
   assert.match(pw.password, PW);
   const { password_hash } = t.db.prepare('SELECT password_hash FROM ssh_accounts WHERE id=?').get(id) as { password_hash: string };
   assert.match(password_hash, SHA512_CRYPT);

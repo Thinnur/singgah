@@ -75,7 +75,7 @@ export function Guide() {
       <ul>
         <li>Di portal, bagian <b>Akun SSH</b>, tekan <b>Ajukan</b> pada lab yang kamu butuhkan, lalu tunggu admin menyetujui.</li>
         <li>Setelah disetujui, tekan <b>Buat password</b>. Password hanya ditampilkan sekali. Kalau lupa, buat ulang.</li>
-        <li>Nyalakan tunnel WireGuard untuk lab itu, lalu masuk dengan username yang tertera di portal, misalnya <code>ssh username@192.168.20.10</code> (alamat sesuai tabel VM target di atas).</li>
+        <li>Nyalakan tunnel WireGuard untuk lab itu, lalu masuk dengan username yang tertera di portal, misalnya <code>ssh username@cyber.lab</code> (nama sesuai tabel VM target di atas).</li>
         <li><b>Windows:</b> ketik perintah itu di PowerShell. <b>macOS / Linux:</b> di Terminal. <b>HP:</b> pakai aplikasi SSH seperti Termius.</li>
       </ul>
       <p>Isi folder <code>/home/username</code> tetap tersimpan. Container tidak punya akses internet, tidak ada <code>sudo</code>, dan port forwarding dimatikan. Akun bisa dicabut admin kapan saja.</p>
