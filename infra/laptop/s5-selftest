@@ -34,6 +34,7 @@ cleanup() {
 	for n in 1 2; do
 		ip netns del "s5t$n" 2>/dev/null
 		ip link del "s5t$n" 2>/dev/null
+		rm -rf "/etc/netns/s5t$n"
 	done
 	[ -n "$TMP" ] && rm -rf "$TMP"
 	return 0
@@ -60,6 +61,8 @@ peer() {   # peer <n> <private key> <ip tunnel>: klien uji di netns s5t<n>, tung
 	local n=$1 priv=$2 ip=$3
 	ip netns del "s5t$n" 2>/dev/null; ip link del "s5t$n" 2>/dev/null
 	ip netns add "s5t$n"
+	# "ip netns exec" memakai berkas ini sebagai /etc/resolv.conf: DNS = 10.8.0.1 seperti config klien
+	install -D -m 644 <(echo "nameserver 10.8.0.1") "/etc/netns/s5t$n/resolv.conf"
 	ip link add "s5t$n" type wireguard
 	wg set "s5t$n" private-key <(echo "$priv") peer "$GW_PUB" endpoint "$ENDPOINT" \
 		allowed-ips 10.8.0.0/24,192.168.0.0/16 persistent-keepalive 1
@@ -136,6 +139,8 @@ mode_db() {
 	sshdenied() { ! sshn 1 192.168.20.10 "$SU" "$PW" true; }
 	if waitfor 10 0.5 sshhost; then ok "SSH peer 1 -> container lab cyber sebagai $SU (${took} dtk)"
 	else bad "SSH peer 1 -> container lab cyber sebagai $SU gagal dalam 10 dtk"; fi
+	sshname()   { [ "$(sshn 1 cyber.lab "$SU" "$PW" hostname 2>/dev/null)" = lab-cyber ]; }
+	check ok   "SSH peer 1 -> nama cyber.lab (DNS gateway)"                 sshname
 	# "ok" = login berhasil DAN target tidak terjangkau; login gagal tetap terhitung FAIL
 	check ok   "dari container: LAN rumah 192.168.1.1:80 tidak terjangkau"  sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/192.168.1.1/80'"
 	check ok   "dari container: internet 1.1.1.1:443 tidak terjangkau"      sshn 1 192.168.20.10 "$SU" "$PW" "! timeout 3 bash -c '</dev/tcp/1.1.1.1/443'"
