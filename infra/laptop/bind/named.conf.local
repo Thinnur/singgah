@@ -1,5 +1,6 @@
-// Zona nama VM target lab. ".internal" = TLD khusus jaringan privat (ICANN, 2024), tidak bentrok dengan internet.
-zone "lab.internal" {
+// Zona nama VM target lab: <id lab>.lab, mis. cyber.lab. TLD ".lab" tidak ada di root DNS publik (dicek 25/11/2026: NXDOMAIN),
+// jadi tidak menimpa situs internet mana pun. Bila suatu saat didelegasikan, pindah ke ".internal" (khusus jaringan privat, ICANN 2024).
+zone "lab" {
 	type primary;
-	file "/etc/bind/db.lab.internal";
+	file "/etc/bind/db.lab";
 };

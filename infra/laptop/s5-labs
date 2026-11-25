@@ -39,7 +39,7 @@ up() {
 			type filter hook input priority filter - 10; policy accept;
 			iifname "wg0" ct state established,related accept
 			iifname "wg0" ip daddr 10.8.0.1 icmp type echo-request accept
-			iifname "wg0" ip daddr 10.8.0.1 meta l4proto { udp, tcp } th dport 53 accept   # Bind9 (DNS lab.internal)
+			iifname "wg0" ip daddr 10.8.0.1 meta l4proto { udp, tcp } th dport 53 accept   # Bind9 (nama <lab>.lab)
 			iifname "wg0" drop
 			# singgah-api (port 8780) hanya dari localhost (nginx) dan relay VPS (jalur lama, untuk rollback rute tunnel)
 			tcp dport 8780 iifname "lo" accept
