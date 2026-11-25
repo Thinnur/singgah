@@ -60,7 +60,7 @@ up() {
 			type filter hook input priority filter - 10; policy accept;
 			iifname "wg0" ct state established,related accept
 			iifname "wg0" ip daddr 10.8.0.1 icmp type echo-request accept
-			iifname "wg0" ip daddr 10.8.0.1 meta l4proto { udp, tcp } th dport 53 accept   # Bind9 (DNS lab.internal)
+			iifname "wg0" ip daddr 10.8.0.1 meta l4proto { udp, tcp } th dport 53 accept   # Bind9 (nama <lab>.lab)
 			iifname "wg0" drop
 			# container lab (veth s5-*) punya shell mahasiswa: tidak boleh membuka koneksi ke layanan laptop
 			# (sshd, k3s, kubelet, ...). Tabel ini hanya IPv4; IPv6 dimatikan di container (container_run).

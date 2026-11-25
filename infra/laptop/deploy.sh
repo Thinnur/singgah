@@ -21,7 +21,7 @@ command -v sshpass >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install 
 docker build -q -t singgah-lab-ssh infra/laptop/lab-ssh >/dev/null
 # DNS klien VPN (Bind9, hanya di 10.8.0.1) dan reverse proxy portal (nginx)
 dpkg -s bind9 bind9-dnsutils nginx >/dev/null 2>&1 || DEBIAN_FRONTEND=noninteractive apt-get install -y -q bind9 bind9-dnsutils nginx
-install -m 644 infra/laptop/bind/named.conf.options infra/laptop/bind/named.conf.local infra/laptop/bind/db.lab.internal /etc/bind/
+install -m 644 infra/laptop/bind/named.conf.options infra/laptop/bind/named.conf.local infra/laptop/bind/db.lab /etc/bind/
 named-checkconf -z >/dev/null
 systemctl enable --quiet named
 install -m 644 infra/laptop/nginx-singgah.conf /etc/nginx/sites-available/singgah

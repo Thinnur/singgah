@@ -122,7 +122,7 @@ mode_db() {
 	check ok   "peer 2 -> lab miliknya (cloud .10.10)"             pingn 2 192.168.10.10
 	check ok   "peer 2 -> halaman web lab cloud (HTTP)"            webn 2 192.168.10.10 "Lab Cloud Computing"
 	check blok "peer 2 (lease lab-cloud) -> lab cyber diblokir"    pingn 2 192.168.20.10
-	check ok   "peer 1 -> DNS gateway: cyber.lab.internal"       dnsn 1 cyber.lab.internal 192.168.20.10
+	check ok   "peer 1 -> DNS gateway: cyber.lab"                dnsn 1 cyber.lab 192.168.20.10
 	check ok   "peer 1 -> DNS gateway: nama internet (rekursif)" dnsn 1 ugm.ac.id
 	check ok   "nginx :8080 -> singgah-api (/api/me = 401)"      nginxc 401 http://127.0.0.1:8080/api/me
 	check ok   "nginx :8080 menutup /auth/test-login (404)"      nginxc 404 -X POST -H 'content-type: application/json' \
