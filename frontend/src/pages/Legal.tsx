@@ -47,7 +47,7 @@ export function Guide() {
       <ul>
         <li><b>HP:</b> di aplikasi WireGuard tekan <b>+</b> → <b>Scan from QR code</b>, lalu arahkan kamera ke QR di layar.</li>
         <li><b>Laptop:</b> tekan <b>Unduh .conf</b>, lalu di aplikasi WireGuard pilih <b>Import tunnel(s) from file</b>.</li>
-        <li><b>Linux:</b> <code>sudo wg-quick up ./singgah-lab-xxx.conf</code></li>
+        <li><b>Linux:</b> <code>sudo wg-quick up ./singgah-cyber.conf</code> (sesuaikan nama file). Kalau muncul <code>resolvconf: command not found</code> (Debian atau distro minimal), pasang paket <code>openresolv</code> lalu ulangi.</li>
       </ul>
       <p><b>Konfigurasi hanya ditampilkan sekali.</b> Kalau hilang sebelum dipasang, lepas lease lalu ajukan lagi. Jangan bagikan konfigurasimu ke orang lain.</p>
 

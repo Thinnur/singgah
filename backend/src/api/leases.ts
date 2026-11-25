@@ -70,7 +70,8 @@ export function leaseRoutes(app: FastifyInstance): void {
     }
     const row = db.prepare(`${SELECT} WHERE l.id=?`).get(made.id) as LeaseRow;
     const config_ = clientConfig({ privateKey: kp.privateKey, address: made.tunnelIp, serverPubkey: config.wgServerPubkey, endpoint: config.wgEndpoint, labCidr: lab!.target_cidr });
-    return reply.status(201).send({ lease: leaseView(row), config: config_, filename: `singgah-${labId}.conf` } satisfies IssueResponse);
+    // nama file = nama interface di wg-quick dan WireGuard Android: maksimal 15 karakter
+    return reply.status(201).send({ lease: leaseView(row), config: config_, filename: `${`singgah-${labId.replace(/^lab-/, '')}`.slice(0, 15)}.conf` } satisfies IssueResponse);
   });
 
   app.post<{ Params: { id: string } }>('/api/leases/:id/release', async (req) => {

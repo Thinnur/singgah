@@ -31,7 +31,7 @@ test('issue: config, no private key stored, current view', async () => {
   const r = await t.issue(u);
   assert.equal(r.statusCode, 201);
   const b = r.json();
-  assert.equal(b.filename, 'singgah-lab-cyber.conf');
+  assert.equal(b.filename, 'singgah-cyber.conf');
   assert.match(b.config, /Address = 10\.8\.0\.2\/32/);
   assert.match(b.config, /AllowedIPs = 10\.8\.0\.1\/32, 192\.168\.20\.0\/24/);
   assert.equal(b.lease.peerActive, false);
