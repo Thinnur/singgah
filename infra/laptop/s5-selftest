@@ -80,7 +80,8 @@ dnsn() {   # dnsn <n> <nama> [ip]: Bind9 di 10.8.0.1 menjawab nama itu lewat tun
 	local a; a=$(ip netns exec "s5t$1" dig +short +time=2 +tries=1 @10.8.0.1 "$2" A) && [ -n "$a" ] &&
 		{ [ $# -lt 3 ] || grep -xF -- "$3" <<<"$a" >/dev/null; }
 }
-nginxc() { [ "$(curl -s -o /dev/null -w '%{http_code}' -m 4 -H 'Host: singgah.akzara.id' "${@:2}")" = "$1" ]; }   # nginxc <kode HTTP> <argumen curl...>
+# nginxc <kode HTTP> <argumen curl...>: jawaban dengan kode itu dan benar dari nginx (port 80 milik Traefik k3s juga menjawab 404)
+nginxc() { [[ "$(curl -s -o /dev/null -w '%{http_code} %header{server}' -m 4 -H 'Host: singgah.akzara.id' "${@:2}")" == "$1 nginx"* ]]; }
 
 # ---- mode bawaan: lease lewat CLI (tidak butuh TEST_MODE) ----
 mode_db() {
@@ -115,9 +116,9 @@ mode_db() {
 	check blok "peer 2 (lease lab-cloud) -> lab cyber diblokir"    pingn 2 192.168.20.10
 	check ok   "peer 1 -> DNS gateway: cyber.lab.internal"       dnsn 1 cyber.lab.internal 192.168.20.10
 	check ok   "peer 1 -> DNS gateway: nama internet (rekursif)" dnsn 1 ugm.ac.id
-	check ok   "nginx :80 -> singgah-api (/api/me = 401)"        nginxc 401 http://127.0.0.1/api/me
-	check ok   "nginx :80 menutup /auth/test-login (404)"        nginxc 404 -X POST -H 'content-type: application/json' \
-		-d "{\"email\":\"$ADMIN_EMAIL\"}" http://127.0.0.1/auth/test-login
+	check ok   "nginx :8080 -> singgah-api (/api/me = 401)"      nginxc 401 http://127.0.0.1:8080/api/me
+	check ok   "nginx :8080 menutup /auth/test-login (404)"      nginxc 404 -X POST -H 'content-type: application/json' \
+		-d "{\"email\":\"$ADMIN_EMAIL\"}" http://127.0.0.1:8080/auth/test-login
 
 	lease revoke --id "${LID[1]}" --reason selftest >/dev/null || bad "revoke lease ${LID[1]} gagal"
 	unset "OPEN[${LID[1]}]"
